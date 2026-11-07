@@ -1,14 +1,7 @@
-// Components
-import { Head, useForm } from '@inertiajs/react';
-import { LoaderCircle } from 'lucide-react';
+import { Head, Link, useForm } from '@inertiajs/react';
 import { FormEventHandler } from 'react';
 
 import InputError from '@/components/input-error';
-import TextLink from '@/components/text-link';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import AuthLayout from '@/layouts/auth-layout';
 
 export default function ForgotPassword({ status }: { status?: string }) {
     const { data, setData, post, processing, errors } = useForm({
@@ -17,47 +10,71 @@ export default function ForgotPassword({ status }: { status?: string }) {
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
-
         post(route('password.email'));
     };
 
     return (
-        <AuthLayout title="Forgot password" description="Enter your email to receive a password reset link">
-            <Head title="Forgot password" />
+        <div className="bg-[#F7F1E8] min-h-screen flex flex-col justify-center items-center px-4 py-8 antialiased selection:bg-[#6E8668] selection:text-white font-sans" style={{ fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+            <Head title="Lupa Password" />
 
-            {status && <div className="mb-4 text-center text-sm font-medium text-green-600">{status}</div>}
+            {/* BEGIN: ForgotPasswordCard */}
+            <main className="w-full max-w-[440px] flex flex-col items-center -mt-16 sm:-mt-20" data-purpose="auth-container">
+                {/* Logo placeholder block */}
+                <div className="w-full h-48 sm:h-52 bg-[#D8D8D8] flex items-center justify-center mb-10 select-none shadow-sm" data-purpose="logo-placeholder">
+                    <span className="text-3xl sm:text-4xl font-bold tracking-tight text-black">Logo</span>
+                </div>
 
-            <div className="space-y-6">
-                <form onSubmit={submit}>
-                    <div className="grid gap-2">
-                        <Label htmlFor="email">Email address</Label>
-                        <Input
-                            id="email"
-                            type="email"
+                {/* BEGIN: VerificationForm */}
+                <form className="w-full flex flex-col" data-purpose="verification-form" onSubmit={submit}>
+                    {status && (
+                        <div className="mb-4 text-center text-sm font-medium text-green-600">
+                            {status}
+                        </div>
+                    )}
+
+                    {/* Input Group: Email / No Telepon */}
+                    <div className="w-full mb-8" data-purpose="input-group">
+                        <label className="block text-sm sm:text-base font-semibold text-black mb-2.5" htmlFor="identifier">
+                            Email/No Telepon
+                        </label>
+                        <input
+                            id="identifier"
                             name="email"
-                            autoComplete="off"
+                            type="text"
+                            required
+                            autoComplete="username"
+                            className="w-full h-12 sm:h-14 px-5 bg-white rounded-xl sm:rounded-2xl border-0 shadow-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#6E8668] transition duration-150 ease-in-out text-base"
                             value={data.email}
-                            autoFocus
                             onChange={(e) => setData('email', e.target.value)}
-                            placeholder="email@example.com"
                         />
-
-                        <InputError message={errors.email} />
+                        <InputError message={errors.email} className="mt-1" />
                     </div>
 
-                    <div className="my-6 flex items-center justify-start">
-                        <Button className="w-full" disabled={processing}>
-                            {processing && <LoaderCircle className="h-4 w-4 animate-spin" />}
-                            Email password reset link
-                        </Button>
+                    {/* Action Button */}
+                    <div className="flex justify-center mb-6" data-purpose="submit-container">
+                        <button
+                            type="submit"
+                            disabled={processing}
+                            className="inline-flex items-center justify-center px-9 py-3 bg-[#6E8668] hover:bg-[#5E7558] active:scale-[0.98] text-white font-medium text-sm sm:text-base rounded-full shadow-sm transition-all duration-200 disabled:opacity-75"
+                            data-purpose="submit-button"
+                        >
+                            Kirim Kode Verifikasi
+                        </button>
+                    </div>
+
+                    {/* Back to Login Navigation Link */}
+                    <div className="text-center" data-purpose="navigation-link">
+                        <Link
+                            href={route('login')}
+                            className="text-sm font-medium text-[#2F6BE3] hover:text-blue-700 hover:underline transition-colors duration-150"
+                        >
+                            Kembali ke Login
+                        </Link>
                     </div>
                 </form>
-
-                <div className="text-muted-foreground space-x-1 text-center text-sm">
-                    <span>Or, return to</span>
-                    <TextLink href={route('login')}>log in</TextLink>
-                </div>
-            </div>
-        </AuthLayout>
+                {/* END: VerificationForm */}
+            </main>
+            {/* END: ForgotPasswordCard */}
+        </div>
     );
 }
