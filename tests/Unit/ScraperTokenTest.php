@@ -54,8 +54,8 @@ it('scores priority events and stores recognized deadlines', function () {
         $table->string('title');
         $table->string('category');
         $table->string('location_name');
-        $table->dateTime('start_date');
-        $table->dateTime('end_date');
+        $table->dateTime('start_date')->nullable();
+        $table->dateTime('end_date')->nullable();
         $table->decimal('latitude', 10, 8);
         $table->decimal('longitude', 11, 8);
         $table->string('source_url')->nullable();
@@ -86,6 +86,8 @@ it('scores priority events and stores recognized deadlines', function () {
             'instagram_post_url' => 'https://www.instagram.com/p/priority-test/',
             'account_name' => 'pestapora',
             'deadline_date' => now()->addDays(2)->toISOString(),
+            'start_date' => now()->addDays(7)->toISOString(),
+            'end_date' => now()->addDays(7)->addHours(4)->toISOString(),
         ]);
         $job->handle();
         $job->handle();
@@ -103,7 +105,9 @@ it('scores priority events and stores recognized deadlines', function () {
         expect(Event::query()->count())->toBe(2)
             ->and(Event::query()->first()->priority_score)->toBe(100)
             ->and(Event::query()->first()->is_priority)->toBeTrue()
+            ->and(Event::query()->first()->start_date)->not->toBeNull()
             ->and(Event::query()->where('source_account', 'info.tenant')->first()->is_priority)->toBeFalse()
+            ->and(Event::query()->where('source_account', 'info.tenant')->first()->start_date)->toBeNull()
             ->and(Carbon::parse(Tenant::query()->first()->deadline_date)->isFuture())->toBeTrue();
     } finally {
         Schema::dropIfExists('event_tenants');
