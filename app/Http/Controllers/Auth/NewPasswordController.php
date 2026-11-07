@@ -55,11 +55,9 @@ class NewPasswordController extends Controller
             }
         );
 
-        // If the password was successfully reset, we will redirect the user back to
-        // the application's home authenticated view. If there is an error we can
-        // redirect them back to where they came from with their error message.
+        // Show the password-changed confirmation after a successful reset.
         if ($status == Password::PasswordReset) {
-            return to_route('login')->with('status', __($status));
+            return to_route('password.success');
         }
 
         throw ValidationException::withMessages([

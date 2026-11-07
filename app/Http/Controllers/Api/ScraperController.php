@@ -24,6 +24,8 @@ class ScraperController extends Controller
             'account_name' => ['required', 'string', 'max:100', 'regex:/^[a-zA-Z0-9._]+$/'],
             'posted_at' => 'nullable|date',
             'deadline_date' => 'nullable|date',
+            'start_date' => 'required_with:end_date|nullable|date',
+            'end_date' => 'required_with:start_date|nullable|date|after_or_equal:start_date',
         ]);
 
         if ($validator->fails()) {

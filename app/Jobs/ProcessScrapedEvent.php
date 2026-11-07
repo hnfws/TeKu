@@ -53,11 +53,14 @@ class ProcessScrapedEvent implements ShouldBeUnique, ShouldQueue
                 'title' => $this->payload['title'],
                 'category' => 'bazaar',
                 'location_name' => $this->payload['location_name'] ?? 'Lokasi Perlu Validasi',
-                'start_date' => now(),
-                'end_date' => now()->addDays(3),
+                'start_date' => $this->eventDate($this->payload['start_date'] ?? null),
+                'end_date' => $this->eventDate($this->payload['end_date'] ?? null),
                 'latitude' => $this->payload['latitude'],
                 'longitude' => $this->payload['longitude'],
                 'source_url' => $this->payload['registration_link'] ?? null,
+                'description' => $this->payload['description'] ?? null,
+                'price' => $this->payload['price'] ?? null,
+                'organizer_name' => $accountName,
                 'source_account' => $accountName,
                 'priority_score' => $priorityScore,
                 'is_priority' => DB::getDriverName() === 'pgsql'
@@ -84,5 +87,12 @@ class ProcessScrapedEvent implements ShouldBeUnique, ShouldQueue
                     : null,
             ]);
         });
+    }
+
+    private function eventDate(?string $date): ?string
+    {
+        return $date === null
+            ? null
+            : Carbon::parse($date)->setTimezone(config('app.timezone'))->toDateTimeString();
     }
 }
