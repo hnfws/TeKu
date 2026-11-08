@@ -196,3 +196,28 @@ test('sale details are private to the transaction owner', function () {
         ->assertInertia(fn ($page) => $page->component('sales/show')->has('sale.items', 1));
     $this->actingAs($otherUser)->get("/sales/{$sale->id}")->assertNotFound();
 });
+
+test('sale details include the current product image', function () {
+    $user = User::factory()->create();
+    $product = createSaleProduct($user, ['image_path' => 'inventory/cookie.jpg']);
+    $sale = Sale::create([
+        'user_id' => $user->id,
+        'transaction_code' => 'TEKU000000003',
+        'subtotal' => 20000,
+        'discount_amount' => 0,
+        'total_amount' => 20000,
+        'sold_at' => now(),
+    ]);
+    SaleItem::create([
+        'sale_id' => $sale->id,
+        'inventory_product_id' => $product->id,
+        'product_name' => $product->name,
+        'quantity' => 1,
+        'unit_price' => 20000,
+        'line_total' => 20000,
+    ]);
+
+    $this->actingAs($user)->get("/sales/{$sale->id}")
+        ->assertInertia(fn ($page) => $page
+            ->where('sale.items.0.product.image_path', 'inventory/cookie.jpg'));
+});

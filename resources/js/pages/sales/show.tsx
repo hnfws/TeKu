@@ -10,6 +10,7 @@ type SaleItem = {
     quantity: number;
     unit_price: string | number;
     line_total: string | number;
+    product?: { image_path: string | null } | null;
 };
 type SaleData = {
     id: number;
@@ -53,7 +54,7 @@ export default function SaleShow({ sale }: SaleShowProps) {
                     <div className="space-y-3.5">
                         <p className="text-sm font-medium text-gray-900">Nama Barang</p>
                         {sale.items.map((item) => <article className="flex items-center justify-between gap-4 rounded-xl border border-[#e8e8e8] p-3.5 transition hover:bg-stone-50/50" key={item.id}>
-                            <div className="flex min-w-0 items-center gap-4"><div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-[#d4d4d4] text-white"><i className="fa-solid fa-box" /></div><div className="min-w-0 space-y-0.5"><h3 className="truncate text-[15px] font-semibold leading-snug text-gray-900">{item.product_name}</h3><p className="text-xs text-[#8e8e93]">{item.sku ? `SKU: ${item.sku}` : item.category || 'Produk'}</p><p className="text-xs text-[#8e8e93]">{money(item.unit_price)} / unit</p></div></div>
+                            <div className="flex min-w-0 items-center gap-4"><div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-[#d4d4d4] text-white">{item.product?.image_path ? <img alt={item.product_name} className="h-full w-full object-cover" src={`/storage/${item.product.image_path}`} /> : <i className="fa-solid fa-box" />}</div><div className="min-w-0 space-y-0.5"><h3 className="truncate text-[15px] font-semibold leading-snug text-gray-900">{item.product_name}</h3><p className="text-xs text-[#8e8e93]">{item.sku ? `SKU: ${item.sku}` : item.category || 'Produk'}</p><p className="text-xs text-[#8e8e93]">{money(item.unit_price)} / unit</p></div></div>
                             <div className="shrink-0 space-y-1 text-right"><span className="block text-sm font-bold text-gray-900">x{item.quantity}</span><span className="block text-[15px] font-bold text-gray-900">{money(item.line_total)}</span></div>
                         </article>)}
                     </div>

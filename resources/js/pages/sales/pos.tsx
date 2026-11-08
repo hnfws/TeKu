@@ -31,8 +31,9 @@ const money = (value: number) => new Intl.NumberFormat('id-ID', {
     maximumFractionDigits: 0,
 }).format(value);
 
-function csrfToken(): string {
-    return document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
+function xsrfToken(): string {
+    const cookie = document.cookie.split('; ').find((value) => value.startsWith('XSRF-TOKEN='));
+    return cookie ? decodeURIComponent(cookie.slice('XSRF-TOKEN='.length)) : '';
 }
 
 export default function Pos({ products, customerName, promotionsAvailable }: PosProps) {
@@ -77,13 +78,15 @@ export default function Pos({ products, customerName, promotionsAvailable }: Pos
         setAppliedPromo(null);
 
         try {
-            if (!csrfToken()) throw new Error('Token keamanan tidak ditemukan. Muat ulang halaman lalu coba kembali.');
+            const token = xsrfToken();
+            if (!token) throw new Error('Token keamanan tidak ditemukan. Muat ulang halaman lalu coba kembali.');
             const response = await fetch('/sales/promotion', {
                 method: 'POST',
+                credentials: 'same-origin',
                 headers: {
                     Accept: 'application/json',
                     'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': csrfToken(),
+                    'X-XSRF-TOKEN': token,
                 },
                 body: JSON.stringify({
                     code: promoCode,

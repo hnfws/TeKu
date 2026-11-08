@@ -156,7 +156,7 @@ class SalesController extends Controller
     public function show(Request $request, Sale $sale): Response
     {
         abort_unless($sale->user_id === $request->user()->id, 404);
-        $sale->load('items');
+        $sale->load('items.product:id,image_path');
 
         return Inertia::render('sales/show', ['sale' => $sale]);
     }
