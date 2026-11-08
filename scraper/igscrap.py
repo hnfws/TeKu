@@ -4,7 +4,7 @@ import time
 from calendar import monthrange
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 import requests
 from dotenv import load_dotenv
@@ -15,6 +15,27 @@ load_dotenv(dotenv_path=Path(__file__).with_name(".env"))
 LARAVEL_API_URL = os.getenv("LARAVEL_API_URL", "http://localhost:8000/api/scraped-events")
 API_TOKEN = os.getenv("SCRAPER_API_TOKEN")
 API_TIMEOUT_SECONDS = 120
+
+
+def api_endpoint(suffix=""):
+    """Accept an app URL, /api URL, or the scraped-events API endpoint."""
+    parsed = urlsplit(LARAVEL_API_URL.strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.query or parsed.fragment:
+        raise RuntimeError(
+            "LARAVEL_API_URL harus berupa URL aplikasi atau endpoint /api/scraped-events yang valid."
+        )
+
+    path = parsed.path.rstrip("/")
+    endpoint = "/api/scraped-events"
+    if path.endswith(endpoint):
+        base_path = path
+    elif path.endswith("/api"):
+        base_path = f"{path}/scraped-events"
+    else:
+        base_path = f"{path}{endpoint}"
+
+    return urlunsplit((parsed.scheme, parsed.netloc, f"{base_path}{suffix}", "", ""))
+
 
 TARGET_ACCOUNTS = [
     "infobazaar",
@@ -101,7 +122,7 @@ def api_headers():
 
 def get_known_posts(account_name):
     response = requests.get(
-        f"{LARAVEL_API_URL.rstrip('/')}/known-posts",
+        api_endpoint("/known-posts"),
         params={"account": account_name},
         headers=api_headers(),
         timeout=API_TIMEOUT_SECONDS,
@@ -116,7 +137,7 @@ def mark_posts_seen(account_name, posts):
 
     for index in range(0, len(posts), 500):
         response = requests.post(
-            f"{LARAVEL_API_URL.rstrip('/')}/seen-posts",
+            api_endpoint("/seen-posts"),
             json={"account": account_name, "posts": posts[index:index + 500]},
             headers=api_headers(),
             timeout=API_TIMEOUT_SECONDS,
@@ -185,7 +206,7 @@ def send_match(account_name, post_url, caption, posted_at):
     }
 
     response = requests.post(
-        LARAVEL_API_URL,
+        api_endpoint(),
         json=payload,
         headers=headers,
         timeout=API_TIMEOUT_SECONDS,
