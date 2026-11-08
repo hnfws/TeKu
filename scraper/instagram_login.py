@@ -8,19 +8,22 @@ def main():
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=False)
-        context = browser.new_context()
-        page = context.new_page()
-        page.goto("https://www.instagram.com/accounts/login/", wait_until="domcontentloaded")
+        try:
+            context = browser.new_context()
+            page = context.new_page()
+            page.goto("https://www.instagram.com/accounts/login/", wait_until="domcontentloaded")
 
-        input("Login Instagram di browser yang terbuka, lalu tekan Enter di terminal ini...")
-        if "/accounts/login" in page.url or "/challenge/" in page.url:
+            input("Login Instagram di browser yang terbuka, lalu tekan Enter di terminal ini...")
+            cookies = context.cookies("https://www.instagram.com")
+            if not any(cookie["name"] == "sessionid" for cookie in cookies):
+                raise RuntimeError(
+                    "Cookie sesi Instagram belum ditemukan di browser yang dibuka script. "
+                    "Pastikan login dilakukan di jendela Chromium tersebut, lalu coba lagi."
+                )
+
+            context.storage_state(path=str(storage_state))
+        finally:
             browser.close()
-            raise RuntimeError(
-                "Login belum selesai atau Instagram meminta verifikasi; sesi tidak disimpan."
-            )
-
-        context.storage_state(path=str(storage_state))
-        browser.close()
 
     print(f"Sesi Instagram disimpan secara lokal di: {storage_state}")
     print("Jangan bagikan atau commit file sesi ini; file berisi cookie autentikasi.")
