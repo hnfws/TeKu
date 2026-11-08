@@ -1,0 +1,37 @@
+<?php
+
+return [
+    'credit_limit' => 100_000_000,
+    'minimum_loan' => 500_000,
+    'daily_interest_rate' => 0.06,
+    'interest_days_per_month' => 30,
+    'monthly_interest_rate' => 1.8,
+    'terms' => [2, 3, 6, 9, 12, 24],
+    'banks' => [
+        'BCA',
+        'BRI',
+        'BNI',
+        'BTN',
+        'Bank DKI',
+        'Mandiri',
+        'Bank JAGO',
+        'CIMB',
+        'Bank Syariah Indonesia',
+        'Danamon',
+    ],
+    'payment_methods' => [
+        'Gopay' => 'gopay',
+        'OVO' => 'ovo',
+        'DANA' => 'dana',
+        'QRIS' => 'qris',
+        'BCA Virtual Account' => 'bca_va',
+        'BNI Virtual Account' => 'bni_va',
+        'BRI Virtual Account' => 'bri_va',
+        'Mandiri Virtual Account' => 'mandiri_va',
+        'BTN Virtual Account' => 'btn_va',
+        'CIMB Virtual Account' => 'cimb_va',
+        'Bank Syariah Indonesia' => 'bsi_va',
+        'Danamon Virtual Account' => 'danamon_va',
+        'Virtual Account Lainnya' => 'other_va',
+    ],
+];

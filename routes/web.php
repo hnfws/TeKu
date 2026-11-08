@@ -8,6 +8,8 @@ use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\PromotionController;
 use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\SalesController;
+use App\Http\Controllers\TeKuModalController;
+use App\Http\Controllers\TeKuModalPaymentController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -46,6 +48,17 @@ Route::middleware(['auth'])->group(function () {
     Route::post('sales/promotion', [SalesController::class, 'applyPromotion'])->name('sales.promotion');
     Route::post('sales', [SalesController::class, 'store'])->name('sales.store');
     Route::get('sales/{sale}', [SalesController::class, 'show'])->whereNumber('sale')->name('sales.show');
+
+    Route::get('tekumodal', [TeKuModalController::class, 'index'])->name('tekumodal.index');
+    Route::get('tekumodal/loans/create', [TeKuModalController::class, 'createLoan'])->name('tekumodal.loans.create');
+    Route::post('tekumodal/loans', [TeKuModalController::class, 'storeLoan'])->name('tekumodal.loans.store');
+    Route::get('tekumodal/bank-accounts/create', [TeKuModalController::class, 'createBankAccount'])->name('tekumodal.bank-accounts.create');
+    Route::post('tekumodal/bank-accounts', [TeKuModalController::class, 'storeBankAccount'])->name('tekumodal.bank-accounts.store');
+    Route::post('tekumodal/vouchers', [TeKuModalController::class, 'claimVoucher'])->middleware('throttle:5,1')->name('tekumodal.vouchers.claim');
+    Route::post('tekumodal/installments/{installment}/payments', [TeKuModalPaymentController::class, 'initiate'])
+        ->whereNumber('installment')->middleware('throttle:10,1')->name('tekumodal.payments.initiate');
+    Route::get('tekumodal/payments/{payment}/return', [TeKuModalPaymentController::class, 'returnFromProvider'])
+        ->whereNumber('payment')->middleware('throttle:20,1')->name('tekumodal.payments.return');
 });
 
 Route::post('/scraped-events', [ScraperController::class, 'store'])

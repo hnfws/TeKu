@@ -11,7 +11,8 @@ const navigation = [
     { title: 'Persediaan', href: '/inventory', icon: 'fa-boxes-stacked', active: (path: string) => path.startsWith('/inventory') },
     { title: 'Penjualan', href: '/sales', icon: 'fa-cash-register', active: (path: string) => path.startsWith('/sales') },
     { title: 'Promo', href: '/promotions', icon: 'fa-ticket', active: (path: string) => path.startsWith('/promotions') },
-    { title: 'Event Dashboard', href: '/event-dashboard', icon: 'fa-calendar-days', active: (path: string) => path === '/event-dashboard' },
+    { title: 'Event', href: '/event-dashboard', icon: 'fa-calendar-days', active: (path: string) => path === '/event-dashboard' },
+    { title: 'TeKuModal', href: '/tekumodal', icon: 'fa-wallet', active: (path: string) => path.startsWith('/tekumodal') },
 ];
 
 export default function ManagementSidebar({ className = '', onNavigate }: ManagementSidebarProps) {
@@ -28,13 +29,17 @@ export default function ManagementSidebar({ className = '', onNavigate }: Manage
                 <div className="mb-6 flex items-center gap-3">
                     <button
                         aria-label={collapsed ? 'Perluas menu' : 'Ciutkan menu'}
-                        className="rounded-md p-2 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/60"
+                        className="rounded-md p-2 hover:bg-white/10 focus:ring-2 focus:ring-white/60 focus:outline-none"
                         onClick={() => setCollapsed(!collapsed)}
                         type="button"
                     >
                         <i className="fa-solid fa-bars text-lg" />
                     </button>
-                    {!collapsed && <div className="flex h-12 flex-1 items-center justify-center rounded-lg bg-[#f8f6f0] text-sm font-medium tracking-wide text-gray-800 shadow-sm">Logo</div>}
+                    {!collapsed && (
+                        <div className="flex h-12 flex-1 items-center justify-center rounded-lg bg-[#f8f6f0] text-sm font-medium tracking-wide text-gray-800 shadow-sm">
+                            Logo
+                        </div>
+                    )}
                 </div>
                 <div className="mb-5 h-px bg-white/20" />
                 <nav aria-label="Navigasi utama" className="space-y-1.5">
