@@ -50,7 +50,7 @@ export default function ForgotPassword({ status, otpSent }: { status?: string; o
                     {!otpStep ? (
                         <div className="mb-8 w-full" data-purpose="input-group">
                             <label className="mb-2.5 block text-sm font-semibold text-black sm:text-base" htmlFor="identifier">
-                                Email
+                                Email/No telepon
                             </label>
                             <input
                                 id="identifier"
@@ -122,7 +122,7 @@ export default function ForgotPassword({ status, otpSent }: { status?: string; o
                                 }}
                                 type="button"
                             >
-                                Gunakan Email lain
+                                Gunakan Email/No telepon lain
                             </button>
                         </div>
                     )}
