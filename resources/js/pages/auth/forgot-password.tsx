@@ -1,64 +1,141 @@
 import { Head, Link, useForm } from '@inertiajs/react';
-import { FormEventHandler } from 'react';
+import { FormEventHandler, useState } from 'react';
 
 import InputError from '@/components/input-error';
 
-export default function ForgotPassword({ status }: { status?: string }) {
-    const { data, setData, post, processing, errors } = useForm({
-        email: '',
+export default function ForgotPassword({ status, otpSent }: { status?: string; otpSent: boolean }) {
+    const [otpStep, setOtpStep] = useState(otpSent);
+    const { data, setData, post, processing, errors, reset } = useForm({
+        identifier: '',
+        otp: '',
+        password: '',
+        password_confirmation: '',
     });
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
-        post(route('password.email'));
+        if (otpStep) {
+            post(route('password.store'), {
+                onFinish: () => reset('password', 'password_confirmation'),
+            });
+            return;
+        }
+
+        post(route('password.email'), {
+            onSuccess: () => setOtpStep(true),
+        });
     };
 
     return (
-        <div className="bg-[#F7F1E8] min-h-screen flex flex-col justify-center items-center px-4 py-8 antialiased selection:bg-[#6E8668] selection:text-white font-sans" style={{ fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
+        <div
+            className="flex min-h-screen flex-col items-center justify-center bg-[#F7F1E8] px-4 py-8 font-sans antialiased selection:bg-[#6E8668] selection:text-white"
+            style={{ fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}
+        >
             <Head title="Lupa Password" />
 
             {/* BEGIN: ForgotPasswordCard */}
-            <main className="w-full max-w-[440px] flex flex-col items-center -mt-16 sm:-mt-20" data-purpose="auth-container">
+            <main className="-mt-16 flex w-full max-w-[440px] flex-col items-center sm:-mt-20" data-purpose="auth-container">
                 {/* Logo placeholder block */}
-                <div className="w-full h-48 sm:h-52 bg-[#D8D8D8] flex items-center justify-center mb-10 select-none shadow-sm" data-purpose="logo-placeholder">
-                    <span className="text-3xl sm:text-4xl font-bold tracking-tight text-black">Logo</span>
+                <div
+                    className="mb-10 flex h-48 w-full items-center justify-center bg-[#D8D8D8] shadow-sm select-none sm:h-52"
+                    data-purpose="logo-placeholder"
+                >
+                    <span className="text-3xl font-bold tracking-tight text-black sm:text-4xl">Logo</span>
                 </div>
 
                 {/* BEGIN: VerificationForm */}
-                <form className="w-full flex flex-col" data-purpose="verification-form" onSubmit={submit}>
-                    {status && (
-                        <div className="mb-4 text-center text-sm font-medium text-green-600">
-                            {status}
+                <form className="flex w-full flex-col" data-purpose="verification-form" onSubmit={submit}>
+                    {status && <div className="mb-4 text-center text-sm font-medium text-green-600">{status}</div>}
+
+                    {!otpStep ? (
+                        <div className="mb-8 w-full" data-purpose="input-group">
+                            <label className="mb-2.5 block text-sm font-semibold text-black sm:text-base" htmlFor="identifier">
+                                Email
+                            </label>
+                            <input
+                                id="identifier"
+                                name="identifier"
+                                type="text"
+                                required
+                                autoComplete="username"
+                                className="h-12 w-full rounded-xl border-0 bg-white px-5 text-base text-gray-800 shadow-sm transition duration-150 ease-in-out focus:ring-2 focus:ring-[#6E8668] focus:outline-none sm:h-14 sm:rounded-2xl"
+                                value={data.identifier}
+                                onChange={(e) => setData('identifier', e.target.value)}
+                            />
+                            <InputError message={errors.identifier} className="mt-1" />
+                        </div>
+                    ) : (
+                        <div className="mb-8 w-full space-y-4" data-purpose="otp-reset-form">
+                            <div>
+                                <label className="mb-2 block text-sm font-semibold text-black" htmlFor="otp">
+                                    Kode OTP
+                                </label>
+                                <input
+                                    autoComplete="one-time-code"
+                                    className="h-12 w-full rounded-xl border-0 bg-white px-5 text-base text-gray-800 shadow-sm focus:ring-2 focus:ring-[#6E8668] focus:outline-none"
+                                    id="otp"
+                                    inputMode="numeric"
+                                    maxLength={6}
+                                    onChange={(e) => setData('otp', e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                    required
+                                    value={data.otp}
+                                />
+                                <InputError message={errors.otp} className="mt-1" />
+                            </div>
+                            <div>
+                                <label className="mb-2 block text-sm font-semibold text-black" htmlFor="new-password">
+                                    Password Baru
+                                </label>
+                                <input
+                                    autoComplete="new-password"
+                                    className="h-12 w-full rounded-xl border-0 bg-white px-5 text-base text-gray-800 shadow-sm focus:ring-2 focus:ring-[#6E8668] focus:outline-none"
+                                    id="new-password"
+                                    onChange={(e) => setData('password', e.target.value)}
+                                    required
+                                    type="password"
+                                    value={data.password}
+                                />
+                                <InputError message={errors.password} className="mt-1" />
+                            </div>
+                            <div>
+                                <label className="mb-2 block text-sm font-semibold text-black" htmlFor="password-confirmation">
+                                    Konfirmasi Password Baru
+                                </label>
+                                <input
+                                    autoComplete="new-password"
+                                    className="h-12 w-full rounded-xl border-0 bg-white px-5 text-base text-gray-800 shadow-sm focus:ring-2 focus:ring-[#6E8668] focus:outline-none"
+                                    id="password-confirmation"
+                                    onChange={(e) => setData('password_confirmation', e.target.value)}
+                                    required
+                                    type="password"
+                                    value={data.password_confirmation}
+                                />
+                                <InputError message={errors.password_confirmation} className="mt-1" />
+                            </div>
+                            <button
+                                className="text-sm font-medium text-[#2F6BE3] hover:underline"
+                                onClick={() => {
+                                    setOtpStep(false);
+                                    setData('otp', '');
+                                    setData('password', '');
+                                    setData('password_confirmation', '');
+                                }}
+                                type="button"
+                            >
+                                Gunakan Email lain
+                            </button>
                         </div>
                     )}
 
-                    {/* Input Group: Email / No Telepon */}
-                    <div className="w-full mb-8" data-purpose="input-group">
-                        <label className="block text-sm sm:text-base font-semibold text-black mb-2.5" htmlFor="identifier">
-                            Email/No Telepon
-                        </label>
-                        <input
-                            id="identifier"
-                            name="email"
-                            type="text"
-                            required
-                            autoComplete="username"
-                            className="w-full h-12 sm:h-14 px-5 bg-white rounded-xl sm:rounded-2xl border-0 shadow-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#6E8668] transition duration-150 ease-in-out text-base"
-                            value={data.email}
-                            onChange={(e) => setData('email', e.target.value)}
-                        />
-                        <InputError message={errors.email} className="mt-1" />
-                    </div>
-
                     {/* Action Button */}
-                    <div className="flex justify-center mb-6" data-purpose="submit-container">
+                    <div className="mb-6 flex justify-center" data-purpose="submit-container">
                         <button
                             type="submit"
                             disabled={processing}
-                            className="inline-flex items-center justify-center px-9 py-3 bg-[#6E8668] hover:bg-[#5E7558] active:scale-[0.98] text-white font-medium text-sm sm:text-base rounded-full shadow-sm transition-all duration-200 disabled:opacity-75"
+                            className="inline-flex items-center justify-center rounded-full bg-[#6E8668] px-9 py-3 text-sm font-medium text-white shadow-sm transition-all duration-200 hover:bg-[#5E7558] active:scale-[0.98] disabled:opacity-75 sm:text-base"
                             data-purpose="submit-button"
                         >
-                            Kirim Kode Verifikasi
+                            {otpStep ? 'Atur Ulang Password' : 'Kirim Kode Verifikasi'}
                         </button>
                     </div>
 
@@ -66,7 +143,7 @@ export default function ForgotPassword({ status }: { status?: string }) {
                     <div className="text-center" data-purpose="navigation-link">
                         <Link
                             href={route('login')}
-                            className="text-sm font-medium text-[#2F6BE3] hover:text-blue-700 hover:underline transition-colors duration-150"
+                            className="text-sm font-medium text-[#2F6BE3] transition-colors duration-150 hover:text-blue-700 hover:underline"
                         >
                             Kembali ke Login
                         </Link>
