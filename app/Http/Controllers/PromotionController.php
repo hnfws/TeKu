@@ -133,6 +133,8 @@ class PromotionController extends Controller
             ]);
         }
 
+        $data['minimum_purchase'] = $data['minimum_purchase'] ?? 0;
+
         return $data;
     }
 }

@@ -77,6 +77,49 @@ test('promotion codes are unique per user without case sensitivity and discounts
     expect(Promotion::query()->count())->toBe(1);
 });
 
+test('blank minimum purchase is stored as zero when creating or updating a promotion', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->post('/promotions', [
+        'code' => 'TANPAMINIMUM',
+        'discount_type' => 'percent',
+        'discount_value' => 5,
+        'minimum_purchase' => '',
+    ])->assertRedirect('/promotions')->assertSessionHasNoErrors();
+
+    $promotion = Promotion::query()->where('code', 'TANPAMINIMUM')->firstOrFail();
+    expect((float) $promotion->minimum_purchase)->toBe(0.0);
+
+    $this->put("/promotions/{$promotion->id}", [
+        'code' => 'TANPAMINIMUM',
+        'discount_type' => 'percent',
+        'discount_value' => 5,
+        'minimum_purchase' => '',
+        'maximum_discount' => '',
+        'starts_at' => '',
+        'ends_at' => '',
+        'is_active' => true,
+    ])->assertRedirect('/promotions')->assertSessionHasNoErrors();
+
+    expect((float) $promotion->fresh()->minimum_purchase)->toBe(0.0);
+});
+
+test('promotion dates submitted as UTC instants are stored without shifting their selected time', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->post('/promotions', [
+        'code' => 'TANGGALLOKAL',
+        'discount_type' => 'percent',
+        'discount_value' => 10,
+        'starts_at' => '2026-11-09T12:53:00.000Z',
+        'ends_at' => '2026-11-11T12:53:00.000Z',
+    ])->assertRedirect('/promotions')->assertSessionHasNoErrors();
+
+    $promotion = Promotion::query()->where('code', 'TANGGALLOKAL')->firstOrFail();
+    expect($promotion->starts_at->toIso8601String())->toBe('2026-11-09T12:53:00+00:00')
+        ->and($promotion->ends_at->toIso8601String())->toBe('2026-11-11T12:53:00+00:00');
+});
+
 test('promotion records and actions are scoped to their owner', function () {
     $owner = User::factory()->create();
     $otherUser = User::factory()->create();

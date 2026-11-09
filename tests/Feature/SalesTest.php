@@ -173,6 +173,35 @@ test('only active database promotions are applied at checkout', function () {
     ])->assertUnprocessable();
 });
 
+test('promo validation distinguishes missing and expired codes', function () {
+    $user = User::factory()->create();
+    $product = createSaleProduct($user);
+
+    $this->actingAs($user)->postJson('/sales/promotion', [
+        'code' => 'TIDAKADA',
+        'items' => [['product_id' => $product->id, 'quantity' => 1]],
+    ])->assertUnprocessable()->assertJsonValidationErrors([
+        'code' => 'Promo tidak ada.',
+    ]);
+
+    Promotion::create([
+        'user_id' => $user->id,
+        'code' => 'KADALUWARSA',
+        'discount_type' => 'percent',
+        'discount_value' => 10,
+        'minimum_purchase' => 0,
+        'is_active' => true,
+        'ends_at' => now()->subMinute(),
+    ]);
+
+    $this->actingAs($user)->postJson('/sales/promotion', [
+        'code' => 'KADALUWARSA',
+        'items' => [['product_id' => $product->id, 'quantity' => 1]],
+    ])->assertUnprocessable()->assertJsonValidationErrors([
+        'code' => 'Kode promo telah kedaluwarsa.',
+    ]);
+});
+
 test('sale details are private to the transaction owner', function () {
     $owner = User::factory()->create();
     $otherUser = User::factory()->create();
