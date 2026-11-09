@@ -112,7 +112,7 @@ test('loan applications cannot use another user bank account or exceed the avail
     expect(LoanApplication::query()->where('user_id', $otherUser->id)->count())->toBe(1);
 });
 
-test('five on-time installments unlock one one-time 20 percent rent voucher', function () {
+test('one hundred xp earns 120 TekuPoints that can be exchanged for tenant vouchers', function () {
     $user = User::factory()->create();
     $account = BankAccount::create([
         'user_id' => $user->id,
@@ -143,17 +143,106 @@ test('five on-time installments unlock one one-time 20 percent rent voucher', fu
 
     $this->actingAs($user)->get('/tekumodal')
         ->assertInertia(fn ($page) => $page
-            ->where('metrics.xp', 100)
-            ->where('metrics.can_claim_voucher', true));
+            ->where('metrics.xp', 0)
+            ->where('metrics.points_balance', 120)
+            ->where('metrics.points_per_reward', 120)
+            ->where('rewards.1.can_redeem', true));
 
-    $this->post('/tekumodal/vouchers')->assertRedirect('/tekumodal');
+    $this->post('/tekumodal/vouchers', ['type' => 'tenant_discount_10'])->assertRedirect('/tekumodal');
     $voucher = TeKuModalVoucher::query()->firstOrFail();
-    expect($voucher->discount_percentage)->toBe(20)
+    expect($voucher->type)->toBe('tenant_discount_10')
+        ->and($voucher->points_cost)->toBe(120)
+        ->and($voucher->discount_percentage)->toBe(10)
+        ->and($voucher->max_discount_amount)->toBe(300_000)
         ->and($voucher->status)->toBe('available')
-        ->and($voucher->code)->toStartWith('TEKU20-');
+        ->and($voucher->code)->toStartWith('TEKU-');
 
-    $this->post('/tekumodal/vouchers')->assertSessionHasErrors('voucher');
+    $this->get('/tekumodal')->assertInertia(fn ($page) => $page
+        ->where('metrics.points_balance', 0)
+        ->where('rewards.1.owned_voucher_id', $voucher->id));
+    $this->post('/tekumodal/vouchers', ['type' => 'tenant_discount_20'])->assertSessionHasErrors('voucher');
     expect(TeKuModalVoucher::query()->count())->toBe(1);
+});
+
+test('first-loan interest voucher is free and applies to the submitted loan', function () {
+    $user = User::factory()->create();
+    $account = BankAccount::create([
+        'user_id' => $user->id,
+        'account_holder' => 'Test User',
+        'account_number' => '123456789',
+        'bank_name' => 'BCA',
+    ]);
+
+    $redeemResponse = $this->actingAs($user)->post('/tekumodal/vouchers', ['type' => 'first_loan_interest']);
+    $voucher = TeKuModalVoucher::query()->firstOrFail();
+    $redeemResponse->assertRedirect(route('tekumodal.loans.create', ['voucher_id' => $voucher->id]));
+    expect($voucher->points_cost)->toBe(0)
+        ->and($voucher->interest_rate)->toBe('1.80');
+
+    $this->get("/tekumodal/loans/create?voucher_id={$voucher->id}")
+        ->assertInertia(fn ($page) => $page
+            ->where('selectedVoucherId', $voucher->id)
+            ->has('interestVouchers', 1));
+
+    $this->post('/tekumodal/loans', [
+        'principal' => 500_000,
+        'term_months' => 3,
+        'bank_account_id' => $account->id,
+        'tekumodal_voucher_id' => $voucher->id,
+    ])->assertRedirect('/tekumodal');
+
+    $loan = LoanApplication::query()->firstOrFail();
+    expect($loan->monthly_interest_rate)->toBe('1.80')
+        ->and($loan->total_interest)->toBe(27_000);
+    expect($voucher->fresh()->status)->toBe('used')
+        ->and($voucher->fresh()->loan_application_id)->toBe($loan->id);
+});
+
+test('two hundred TekuPoints can redeem and apply the 1.45 percent interest voucher', function () {
+    $user = User::factory()->create();
+    $account = BankAccount::create([
+        'user_id' => $user->id,
+        'account_holder' => 'Test User',
+        'account_number' => '123456789',
+        'bank_name' => 'BCA',
+    ]);
+    $loan = LoanApplication::create([
+        'user_id' => $user->id,
+        'bank_account_id' => $account->id,
+        'principal' => 1_000_000,
+        'term_months' => 12,
+        'monthly_interest_rate' => 1.8,
+        'total_interest' => 216_000,
+        'total_repayment' => 1_216_000,
+        'status' => 'simulation_active',
+    ]);
+    foreach (range(1, 10) as $number) {
+        LoanInstallment::create([
+            'loan_application_id' => $loan->id,
+            'installment_number' => $number,
+            'due_date' => now()->subMonths(10 - $number)->toDateString(),
+            'amount' => 101_333,
+            'status' => 'paid',
+            'paid_at' => now()->subMonths(10 - $number)->subDay(),
+        ]);
+    }
+
+    $this->actingAs($user)->post('/tekumodal/vouchers', ['type' => 'loan_interest_145'])
+        ->assertRedirect('/tekumodal');
+    $voucher = TeKuModalVoucher::query()->where('type', 'loan_interest_145')->firstOrFail();
+    expect($voucher->points_cost)->toBe(200)
+        ->and($voucher->interest_rate)->toBe('1.45');
+
+    $this->post('/tekumodal/loans', [
+        'principal' => 500_000,
+        'term_months' => 3,
+        'bank_account_id' => $account->id,
+        'tekumodal_voucher_id' => $voucher->id,
+    ])->assertRedirect('/tekumodal');
+    $discountedLoan = LoanApplication::query()->latest('id')->firstOrFail();
+    expect($discountedLoan->monthly_interest_rate)->toBe('1.45')
+        ->and($discountedLoan->total_interest)->toBe(21_750)
+        ->and($voucher->fresh()->loan_application_id)->toBe($discountedLoan->id);
 });
 
 test('installment dates preserve monthly day across short months', function () {
@@ -182,6 +271,63 @@ test('installment dates preserve monthly day across short months', function () {
     } finally {
         Carbon::setTestNow();
     }
+});
+
+test('payment result includes the correct billing and gamification summary', function () {
+    $user = User::factory()->create();
+    $account = BankAccount::create([
+        'user_id' => $user->id,
+        'account_holder' => 'Test User',
+        'account_number' => '123456789',
+        'bank_name' => 'BCA',
+    ]);
+    $loan = LoanApplication::create([
+        'user_id' => $user->id,
+        'bank_account_id' => $account->id,
+        'principal' => 500_000,
+        'term_months' => 3,
+        'monthly_interest_rate' => 2,
+        'total_interest' => 30_000,
+        'total_repayment' => 530_000,
+        'status' => 'simulation_active',
+    ]);
+    $installment = LoanInstallment::create([
+        'loan_application_id' => $loan->id,
+        'installment_number' => 1,
+        'due_date' => now()->toDateString(),
+        'amount' => 1_000,
+        'status' => 'paid',
+        'paid_at' => now(),
+    ]);
+    $payment = LoanPayment::create([
+        'loan_installment_id' => $installment->id,
+        'order_id' => (string) str()->uuid(),
+        'payment_method' => 'qris',
+        'amount' => 1_000,
+        'status' => 'paid',
+        'paid_at' => now(),
+    ]);
+
+    $this->actingAs($user)
+        ->withSession(["tekumodal.payment_animation.{$payment->id}" => true])
+        ->get("/tekumodal/payments/{$payment->id}/return")
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('tekumodal/payment-result')
+            ->where('payment.status', 'paid')
+            ->where('payment.due_date', now()->toDateString())
+            ->where('summary.period', 'current')
+            ->where('summary.available_limit', 99_500_000)
+            ->where('summary.xp', 20)
+            ->where('summary.previous_xp', 0)
+            ->where('summary.scroll_to_constellation', true)
+            ->where('summary.animate_constellation', true)
+            ->where('summary.paid_installments', 1));
+
+    $this->get("/tekumodal/payments/{$payment->id}/return")
+        ->assertInertia(fn ($page) => $page
+            ->where('summary.scroll_to_constellation', false)
+            ->where('summary.animate_constellation', false));
 });
 
 test('Midtrans gateway refuses non-sandbox credentials before making provider requests', function () {
@@ -245,8 +391,10 @@ test('Inertia payment requests are redirected to the Midtrans sandbox checkout',
         ->assertStatus(409)
         ->assertHeader('X-Inertia-Location', $checkoutUrl);
 
+    $payment = LoanPayment::query()->firstOrFail();
+    expect(session()->get("tekumodal.payment_animation.{$payment->id}"))->toBeTrue();
     expect(LoanPayment::query()->count())->toBe(1)
-        ->and(LoanPayment::query()->firstOrFail()->redirect_url)->toBe($checkoutUrl);
+        ->and($payment->redirect_url)->toBe($checkoutUrl);
 });
 
 test('Midtrans notifications require a valid sandbox signature and settle an installment idempotently', function () {

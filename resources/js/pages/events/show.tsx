@@ -31,6 +31,23 @@ interface EventShowProps {
     event: EventItem;
     isRegistered: boolean;
     registrationClosed: boolean;
+    tenantVouchers: {
+        id: number;
+        type: string;
+        discount_percentage: number;
+        max_discount_amount: number | null;
+        title: string;
+    }[];
+    tenantPaymentMethods: { label: string; code: string }[];
+    tenantBookings: {
+        id: number;
+        tenant_id: number;
+        base_amount: number;
+        discount_amount: number;
+        amount: number;
+        status: string;
+        created_at: string;
+    }[];
 }
 
 const dateLabel = (value: string | null) =>
@@ -40,7 +57,7 @@ const money = (value: number | string | null) =>
         ? 'Gratis'
         : new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value));
 
-export default function EventShow({ event, isRegistered, registrationClosed }: EventShowProps) {
+export default function EventShow({ event, isRegistered, registrationClosed, tenantVouchers, tenantPaymentMethods, tenantBookings }: EventShowProps) {
     const form = useForm({});
     const flash = usePage<{ flash?: { success?: string; error?: string } }>().props.flash;
     const coordinates = event.latitude && event.longitude ? `${event.latitude},${event.longitude}` : null;
@@ -140,6 +157,15 @@ export default function EventShow({ event, isRegistered, registrationClosed }: E
                                                     >
                                                         Buka informasi pendaftaran <i className="fa-solid fa-arrow-up-right-from-square" />
                                                     </a>
+                                                )}
+                                                {tenant.tenant_type === 'direct_rent' && tenant.price !== null && (
+                                                    <TenantRentalCheckout
+                                                        eventId={event.id}
+                                                        tenant={tenant}
+                                                        vouchers={tenantVouchers}
+                                                        paymentMethods={tenantPaymentMethods}
+                                                        bookings={tenantBookings.filter((booking) => booking.tenant_id === tenant.id)}
+                                                    />
                                                 )}
                                             </article>
                                         ))}
@@ -243,5 +269,93 @@ export default function EventShow({ event, isRegistered, registrationClosed }: E
                 </div>
             </div>
         </ManagementLayout>
+    );
+}
+
+type TenantRentalCheckoutProps = {
+    eventId: number;
+    tenant: NonNullable<EventItem['tenants']>[number];
+    vouchers: EventShowProps['tenantVouchers'];
+    paymentMethods: EventShowProps['tenantPaymentMethods'];
+    bookings: EventShowProps['tenantBookings'];
+};
+
+function TenantRentalCheckout({ eventId, tenant, vouchers, paymentMethods, bookings }: TenantRentalCheckoutProps) {
+    const form = useForm({ voucher_id: '', payment_method: paymentMethods.find((method) => method.code === 'bca_va')?.code ?? '' });
+    const selectedVoucher = vouchers.find((voucher) => String(voucher.id) === form.data.voucher_id);
+    const baseAmount = Number(tenant.price ?? 0);
+    const discount = selectedVoucher
+        ? Math.min(Math.round((baseAmount * selectedVoucher.discount_percentage) / 100), selectedVoucher.max_discount_amount ?? baseAmount)
+        : 0;
+    const isClosed = tenant.deadline_date ? new Date(tenant.deadline_date).getTime() < Date.now() : false;
+
+    return (
+        <div className="mt-4 rounded-lg border border-[#dfe8dc] bg-white p-4">
+            <h4 className="text-sm font-bold text-stone-900">Sewa tenant dengan TeKuModal</h4>
+            <p className="mt-1 text-xs text-stone-500">Checkout ini menggunakan Midtrans sandbox untuk prototipe booking internal.</p>
+            {bookings.map((booking) => (
+                <p className="mt-2 text-xs text-stone-600" key={booking.id}>
+                    Booking #{booking.id}:{' '}
+                    {booking.status === 'paid' ? 'Lunas' : booking.status === 'pending' ? 'Menunggu pembayaran' : 'Tidak berhasil'} ·{' '}
+                    {money(booking.amount)}
+                </p>
+            ))}
+            <form
+                className="mt-3 space-y-3"
+                onSubmit={(event) => {
+                    event.preventDefault();
+                    form.post(`/events/${eventId}/tenants/${tenant.id}/bookings`);
+                }}
+            >
+                {vouchers.length > 0 && (
+                    <label className="block text-xs font-medium text-stone-700">
+                        Voucher tenant
+                        <select
+                            className="mt-1 block w-full rounded-md border-stone-300 text-sm"
+                            onChange={(event) => form.setData('voucher_id', event.target.value)}
+                            value={form.data.voucher_id}
+                        >
+                            <option value="">Tanpa voucher</option>
+                            {vouchers.map((voucher) => (
+                                <option key={voucher.id} value={voucher.id}>
+                                    {voucher.title}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                )}
+                <label className="block text-xs font-medium text-stone-700">
+                    Metode pembayaran
+                    <select
+                        className="mt-1 block w-full rounded-md border-stone-300 text-sm"
+                        onChange={(event) => form.setData('payment_method', event.target.value)}
+                        value={form.data.payment_method}
+                    >
+                        {paymentMethods.map((method) => (
+                            <option key={method.code} value={method.code}>
+                                {method.label}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+                {selectedVoucher && (
+                    <p className="text-xs text-stone-700">
+                        Harga {money(baseAmount)} · Diskon {money(discount)} · Total {money(baseAmount - discount)}
+                    </p>
+                )}
+                {Object.values(form.errors).map((error) => (
+                    <p className="text-xs text-red-700" key={error}>
+                        {error}
+                    </p>
+                ))}
+                <button
+                    className="w-full rounded-full bg-[#5d775a] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#4d684b] disabled:opacity-60"
+                    disabled={form.processing || isClosed || paymentMethods.length === 0}
+                    type="submit"
+                >
+                    {form.processing ? 'Menyiapkan checkout...' : isClosed ? 'Pendaftaran tenant ditutup' : 'Sewa dan bayar'}
+                </button>
+            </form>
+        </div>
     );
 }

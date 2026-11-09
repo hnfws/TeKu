@@ -7,13 +7,21 @@ interface LoanFormProps {
     availableLimit: number;
     creditLimit: number;
     minimumLoan: number;
+    monthlyInterestRate: number;
     terms: number[];
     initialPrincipal: number | '';
     initialTermMonths: number;
     bankAccounts: { id: number; bank_name: string; account_holder: string; masked_number: string }[];
+    interestVouchers: { id: number; code: string; type: string; interest_rate: string }[];
+    selectedVoucherId: number | null;
 }
 
-type LoanFormData = { principal: number | ''; term_months: number; bank_account_id: number | '' };
+type LoanFormData = {
+    principal: number | '';
+    term_months: number;
+    bank_account_id: number | '';
+    tekumodal_voucher_id: number | '';
+};
 const money = (value: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(value);
 const fieldClass =
     'w-full rounded-none border-0 bg-[#D6D6D6] px-4 text-sm text-neutral-800 outline-none transition focus:bg-[#e5e5e5] focus:ring-1 focus:ring-[#668263]';
@@ -22,16 +30,26 @@ export default function TeKuModalLoanForm({
     availableLimit,
     creditLimit,
     minimumLoan,
+    monthlyInterestRate,
     terms,
     initialPrincipal,
     initialTermMonths,
     bankAccounts,
+    interestVouchers,
+    selectedVoucherId,
 }: LoanFormProps) {
-    const form = useForm<LoanFormData>({ principal: initialPrincipal, term_months: initialTermMonths, bank_account_id: '' });
+    const form = useForm<LoanFormData>({
+        principal: initialPrincipal,
+        term_months: initialTermMonths,
+        bank_account_id: '',
+        tekumodal_voucher_id: selectedVoucherId ?? '',
+    });
     const errors = form.errors as Record<string, string | undefined>;
     const [bankDropdownOpen, setBankDropdownOpen] = useState(false);
     const bankDropdownRef = useRef<HTMLDivElement>(null);
     const selectedBank = bankAccounts.find((account) => account.id === Number(form.data.bank_account_id));
+    const selectedInterestVoucher = interestVouchers.find((voucher) => voucher.id === Number(form.data.tekumodal_voucher_id));
+    const effectiveMonthlyInterestRate = selectedInterestVoucher?.interest_rate ?? String(monthlyInterestRate);
 
     const submit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -138,6 +156,29 @@ export default function TeKuModalLoanForm({
                             </div>
                             {errors.term_months && <p className="text-xs text-red-600">{errors.term_months}</p>}
                         </fieldset>
+                        {interestVouchers.length > 0 && (
+                            <div className="space-y-2 pt-1">
+                                <label className="block text-sm font-bold text-neutral-900" htmlFor="tekumodal-voucher">
+                                    Gunakan voucher bunga
+                                </label>
+                                <select
+                                    className={`${fieldClass} h-10 max-w-sm px-3 py-2`}
+                                    id="tekumodal-voucher"
+                                    onChange={(event) => form.setData('tekumodal_voucher_id', event.target.value ? Number(event.target.value) : '')}
+                                    value={form.data.tekumodal_voucher_id}
+                                >
+                                    <option value="">Tanpa voucher · {monthlyInterestRate}% per bulan</option>
+                                    {interestVouchers.map((voucher) => (
+                                        <option key={voucher.id} value={voucher.id}>
+                                            {voucher.type === 'first_loan_interest' ? 'Pinjaman pertama' : 'Voucher TeKuModal'} ·{' '}
+                                            {voucher.interest_rate}% per bulan
+                                        </option>
+                                    ))}
+                                </select>
+                                {errors.tekumodal_voucher_id && <p className="text-xs text-red-600">{errors.tekumodal_voucher_id}</p>}
+                                <p className="text-xs text-neutral-700">Bunga yang digunakan: {effectiveMonthlyInterestRate}% per bulan.</p>
+                            </div>
+                        )}
                         <div className="relative space-y-1 pt-1" ref={bankDropdownRef}>
                             <label className="block text-sm font-bold text-neutral-900" id="bank-account-label">
                                 Pilih Rekening Bank

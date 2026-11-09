@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\LoanInstallment;
 use App\Models\LoanPayment;
+use App\Models\Tenant;
+use App\Models\TenantBooking;
 use App\Models\User;
 use Illuminate\Support\Facades\URL;
 use Midtrans\Config;
@@ -58,6 +60,51 @@ class MidtransSandboxGateway
             'enabled_payments' => [$enabledPayment],
             'callbacks' => [
                 'finish' => URL::route('tekumodal.payments.return', $payment),
+            ],
+            'expiry' => [
+                'unit' => 'hour',
+                'duration' => 1,
+            ],
+        ]);
+
+        $redirectUrl = $response->redirect_url ?? null;
+        if (! is_string($redirectUrl) || ! str_starts_with($redirectUrl, 'https://app.sandbox.midtrans.com/')) {
+            throw new RuntimeException('Midtrans did not return a valid sandbox checkout URL.');
+        }
+
+        return $redirectUrl;
+    }
+
+    public function createTenantBookingRedirectUrl(TenantBooking $booking, Tenant $tenant, User $user): string
+    {
+        $this->configureSandbox();
+
+        $enabledPayment = self::PAYMENT_METHODS[$booking->payment_method] ?? null;
+        if ($enabledPayment === null) {
+            throw new RuntimeException('Unsupported sandbox payment method.');
+        }
+
+        Config::$overrideNotifUrl = URL::route('tekumodal.midtrans.notification');
+        $event = $tenant->event;
+
+        $response = Snap::createTransaction([
+            'transaction_details' => [
+                'order_id' => $booking->order_id,
+                'gross_amount' => $booking->amount,
+            ],
+            'item_details' => [[
+                'id' => 'tenant-'.$tenant->id,
+                'price' => $booking->amount,
+                'quantity' => 1,
+                'name' => 'Sewa tenant: '.mb_substr($event?->title ?? 'Event', 0, 40),
+            ]],
+            'customer_details' => [
+                'first_name' => $user->name,
+                'email' => $user->email,
+            ],
+            'enabled_payments' => [$enabledPayment],
+            'callbacks' => [
+                'finish' => URL::route('tenant-bookings.return', $booking),
             ],
             'expiry' => [
                 'unit' => 'hour',

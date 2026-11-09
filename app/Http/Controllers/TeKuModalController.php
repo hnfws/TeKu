@@ -8,11 +8,10 @@ use App\Models\LoanInstallment;
 use App\Models\TeKuModalVoucher;
 use App\Models\User;
 use App\Http\Requests\Settings\StoreBankAccountRequest;
+use App\Services\TeKuModalRewards;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -20,7 +19,7 @@ use Inertia\Response;
 
 class TeKuModalController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request, TeKuModalRewards $rewards): Response
     {
         $user = $request->user();
         $period = $request->validate(['period' => ['nullable', Rule::in(['current', 'next'])]])['period'] ?? 'current';
@@ -57,21 +56,21 @@ class TeKuModalController extends Controller
                     : null,
             ]);
 
-        $paidInstallmentsQuery = LoanInstallment::query()
-            ->whereHas('loanApplication', fn ($query) => $query->where('user_id', $user->id))
-            ->where('status', 'paid')
-            ->whereRaw('DATE(paid_at) <= due_date');
-        $paidInstallments = (clone $paidInstallmentsQuery)->count();
-        $earnedVouchers = intdiv($paidInstallments, 5);
-        $claimedVouchers = $user->tekumodalVouchers()->count();
-        $availableVoucherRewards = max(0, $earnedVouchers - $claimedVouchers);
-        $streakStart = now()->startOfMonth()->subMonths(4);
-        $paidMonths = (clone $paidInstallmentsQuery)
-            ->whereBetween('due_date', [$streakStart->toDateString(), now()->endOfMonth()->toDateString()])
-            ->pluck('due_date')
-            ->map(fn ($date) => Carbon::parse($date)->format('Y-m'))
-            ->unique()
-            ->values();
+        $paidInstallments = $rewards->onTimeInstallments($user);
+        $pointsBalance = $rewards->pointsBalance($user, $paidInstallments);
+        $ownedVouchers = $user->tekumodalVouchers()->latest('claimed_at')->limit(20)->get();
+        $rewardCatalog = collect(config('tekumodal.rewards'))->map(function (array $reward) use ($user, $pointsBalance, $ownedVouchers, $rewards) {
+            $ownedVoucher = $ownedVouchers->first(fn (TeKuModalVoucher $voucher) => $voucher->type === $reward['type'] && $voucher->status === 'available');
+            $hasOwnedVoucher = $ownedVouchers->contains(fn (TeKuModalVoucher $voucher) => $voucher->type === $reward['type']);
+            $canRedeem = ! $hasOwnedVoucher && $rewards->canRedeem($user, $reward, $pointsBalance);
+
+            return [
+                ...$reward,
+                'can_redeem' => $canRedeem,
+                'owned_voucher_id' => $ownedVoucher?->id,
+                'has_owned_voucher' => $hasOwnedVoucher,
+            ];
+        })->values();
         $activePrincipal = $user->loanApplications()->where('status', 'simulation_active')->sum('principal');
 
         return Inertia::render('tekumodal/index', [
@@ -105,15 +104,22 @@ class TeKuModalController extends Controller
                 'credit_limit' => (int) config('tekumodal.credit_limit'),
                 'available_limit' => max(0, (int) config('tekumodal.credit_limit') - (int) $activePrincipal),
                 'active_principal' => (int) $activePrincipal,
-                'xp' => $availableVoucherRewards > 0 ? 100 : ($paidInstallments % 5) * 20,
+                'xp' => $rewards->xp($paidInstallments),
                 'paid_installments' => $paidInstallments,
-                'can_claim_voucher' => $availableVoucherRewards > 0,
-                'streak' => collect(range(0, 4))
-                    ->map(fn (int $offset) => $paidMonths->contains($streakStart->copy()->addMonths($offset)->format('Y-m')))
-                    ->all(),
+                'points_balance' => $pointsBalance,
+                'points_per_reward' => (int) config('tekumodal.points_per_reward'),
             ],
-            'vouchers' => $user->tekumodalVouchers()->latest('claimed_at')->limit(5)->get([
-                'id', 'code', 'discount_percentage', 'status', 'claimed_at',
+            'rewards' => $rewardCatalog,
+            'vouchers' => $ownedVouchers->map(fn (TeKuModalVoucher $voucher) => [
+                'id' => $voucher->id,
+                'code' => $voucher->code,
+                'type' => $voucher->type,
+                'points_cost' => $voucher->points_cost,
+                'discount_percentage' => $voucher->discount_percentage,
+                'max_discount_amount' => $voucher->max_discount_amount,
+                'interest_rate' => $voucher->interest_rate,
+                'status' => $voucher->status,
+                'claimed_at' => $voucher->claimed_at,
             ]),
             'paymentMethods' => collect(config('tekumodal.payment_methods'))
                 ->map(fn (string $code, string $label) => ['label' => $label, 'code' => $code])
@@ -129,6 +135,14 @@ class TeKuModalController extends Controller
         $availableLimit = max(0, (int) config('tekumodal.credit_limit') - $activePrincipal);
         $initialPrincipal = filter_var($request->query('principal'), FILTER_VALIDATE_INT);
         $initialTerm = filter_var($request->query('term_months'), FILTER_VALIDATE_INT);
+        $interestVouchers = $user->tekumodalVouchers()
+            ->where('status', 'available')
+            ->whereIn('type', ['first_loan_interest', 'loan_interest_145'])
+            ->get(['id', 'code', 'type', 'interest_rate']);
+        $selectedVoucherId = filter_var($request->query('voucher_id'), FILTER_VALIDATE_INT);
+        if ($selectedVoucherId === false || ! $interestVouchers->contains('id', $selectedVoucherId)) {
+            $selectedVoucherId = null;
+        }
 
         return Inertia::render('tekumodal/loan-form', [
             'availableLimit' => $availableLimit,
@@ -155,6 +169,8 @@ class TeKuModalController extends Controller
                     'account_holder' => $account->account_holder,
                     'masked_number' => '•••• '.substr(preg_replace('/\D/', '', $account->account_number) ?? '', -4),
                 ]),
+            'interestVouchers' => $interestVouchers,
+            'selectedVoucherId' => $selectedVoucherId,
         ]);
     }
 
@@ -164,6 +180,7 @@ class TeKuModalController extends Controller
             'principal' => ['required', 'integer', 'min:'.config('tekumodal.minimum_loan'), 'max:'.config('tekumodal.credit_limit')],
             'term_months' => ['required', 'integer', Rule::in(config('tekumodal.terms'))],
             'bank_account_id' => ['required', 'integer', 'exists:bank_accounts,id'],
+            'tekumodal_voucher_id' => ['nullable', 'integer', 'exists:te_ku_modal_vouchers,id'],
         ]);
 
         DB::transaction(function () use ($request, $validated) {
@@ -185,7 +202,23 @@ class TeKuModalController extends Controller
             }
 
             $term = (int) $validated['term_months'];
-            $rate = (float) config('tekumodal.monthly_interest_rate');
+            $voucher = null;
+            if (! empty($validated['tekumodal_voucher_id'])) {
+                $voucher = TeKuModalVoucher::query()
+                    ->where('user_id', $user->id)
+                    ->where('status', 'available')
+                    ->whereIn('type', ['first_loan_interest', 'loan_interest_145'])
+                    ->lockForUpdate()
+                    ->find($validated['tekumodal_voucher_id']);
+
+                if (! $voucher || ($voucher->type === 'first_loan_interest' && $user->loanApplications()->exists())) {
+                    throw ValidationException::withMessages([
+                        'tekumodal_voucher_id' => 'Voucher bunga ini tidak tersedia atau sudah tidak memenuhi syarat.',
+                    ]);
+                }
+            }
+
+            $rate = $voucher?->interest_rate ?? (float) config('tekumodal.monthly_interest_rate');
             $totalInterest = (int) round($principal * ($rate / 100) * $term);
             $totalRepayment = $principal + $totalInterest;
             $baseInstallment = (int) round($totalRepayment / $term);
@@ -203,6 +236,19 @@ class TeKuModalController extends Controller
                 'status' => 'simulation_active',
                 'approved_at' => now(),
             ]);
+            if ($voucher) {
+                $voucher->update([
+                    'status' => 'used',
+                    'used_at' => now(),
+                    'loan_application_id' => $loan->id,
+                ]);
+            }
+            if ($user->loanApplications()->count() === 1) {
+                $user->tekumodalVouchers()
+                    ->where('type', 'first_loan_interest')
+                    ->where('status', 'available')
+                    ->update(['status' => 'expired']);
+            }
 
             for ($number = 1; $number <= $term; $number++) {
                 LoanInstallment::create([
@@ -231,34 +277,38 @@ class TeKuModalController extends Controller
         return to_route('tekumodal.index')->with('success', 'Rekening bank berhasil disimpan secara terenkripsi.');
     }
 
-    public function claimVoucher(Request $request): RedirectResponse
+    public function redeemVoucher(Request $request, TeKuModalRewards $rewards): RedirectResponse
     {
-        DB::transaction(function () use ($request) {
+        $validated = $request->validate([
+            'type' => ['required', 'string', Rule::in(collect(config('tekumodal.rewards'))->pluck('type')->all())],
+        ]);
+
+        $voucher = DB::transaction(function () use ($request, $validated, $rewards) {
             $user = User::query()->lockForUpdate()->findOrFail($request->user()->id);
-            $onTimePayments = LoanInstallment::query()
-                ->whereHas('loanApplication', fn ($query) => $query->where('user_id', $user->id))
-                ->where('status', 'paid')
-                ->whereRaw('DATE(paid_at) <= due_date')
-                ->count();
-            $earnedVouchers = intdiv($onTimePayments, 5);
-            if ($user->tekumodalVouchers()->count() >= $earnedVouchers) {
+            $reward = $rewards->rewardFor($validated['type']);
+            if (! $reward) {
                 throw ValidationException::withMessages([
-                    'voucher' => 'Bayar 5 cicilan tepat waktu untuk membuka voucher berikutnya.',
+                    'voucher' => 'Voucher yang dipilih tidak tersedia.',
                 ]);
             }
 
-            do {
-                $code = 'TEKU20-'.Str::upper(Str::random(8));
-            } while (TeKuModalVoucher::query()->where('code', $code)->exists());
+            $pointsBalance = $rewards->pointsBalance($user);
+            if (! $rewards->canRedeem($user, $reward, $pointsBalance)) {
+                throw ValidationException::withMessages([
+                    'voucher' => $reward['first_loan_only']
+                        ? 'Voucher ini hanya tersedia untuk pinjaman pertama.'
+                        : 'TekuPoint kamu belum cukup untuk menukar voucher ini.',
+                ]);
+            }
 
-            $user->tekumodalVouchers()->create([
-                'code' => $code,
-                'discount_percentage' => 20,
-                'status' => 'available',
-                'claimed_at' => now(),
-            ]);
+            return $rewards->createVoucher($user, $reward);
         });
 
-        return to_route('tekumodal.index')->with('success', 'Voucher diskon sewa tenant 20% berhasil diklaim.');
+        if ($voucher->type === 'first_loan_interest') {
+            return to_route('tekumodal.loans.create', ['voucher_id' => $voucher->id])
+                ->with('success', 'Voucher pinjaman pertama siap digunakan.');
+        }
+
+        return to_route('tekumodal.index')->with('success', 'Voucher berhasil ditukar dan ditambahkan ke daftar voucher kamu.');
     }
 }

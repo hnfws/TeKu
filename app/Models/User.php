@@ -66,4 +66,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(TeKuModalVoucher::class);
     }
+
+    public function tenantBookings(): HasMany
+    {
+        return $this->hasMany(TenantBooking::class);
+    }
 }

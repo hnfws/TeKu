@@ -1,6 +1,7 @@
 import { Link, router, usePage } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 
+import TeKuModalConstellation from '@/components/tekumodal-constellation';
 import ManagementLayout from '@/layouts/management-layout';
 
 type Installment = {
@@ -18,9 +19,28 @@ type Installment = {
 type Voucher = {
     id: number;
     code: string;
+    type: string;
+    points_cost: number;
     discount_percentage: number;
+    max_discount_amount: number | null;
+    interest_rate: number | null;
     status: string;
     claimed_at: string;
+};
+
+type Reward = {
+    type: string;
+    category: 'loan' | 'tenant';
+    title: string;
+    description: string;
+    points_cost: number;
+    interest_rate: number | null;
+    discount_percentage: number | null;
+    max_discount_amount: number | null;
+    first_loan_only: boolean;
+    can_redeem: boolean;
+    owned_voucher_id: number | null;
+    has_owned_voucher: boolean;
 };
 
 interface TeKuModalProps {
@@ -54,10 +74,11 @@ interface TeKuModalProps {
         active_principal: number;
         xp: number;
         paid_installments: number;
-        can_claim_voucher: boolean;
-        streak: boolean[];
+        points_balance: number;
+        points_per_reward: number;
     };
     paymentMethods: { label: string; code: string }[];
+    rewards: Reward[];
     vouchers: Voucher[];
     successMessage?: string;
 }
@@ -76,6 +97,7 @@ export default function TeKuModalIndex({
     bankAccounts,
     metrics,
     paymentMethods,
+    rewards,
     vouchers,
     successMessage,
 }: TeKuModalProps) {
@@ -93,6 +115,14 @@ export default function TeKuModalIndex({
         .filter((installment) => installment.status !== 'paid')
         .reduce((total, installment) => total + installment.amount, 0);
     const allPaid = installments.length > 0 && installments.every((installment) => installment.status === 'paid');
+    const unpaidInstallments = installments
+        .filter((installment) => installment.status !== 'paid')
+        .sort((a, b) => a.due_date.localeCompare(b.due_date));
+    const firstUnpaidInstallment = unpaidInstallments[0];
+    const nextDueInstallment = [...installments].sort((a, b) => a.due_date.localeCompare(b.due_date))[0];
+    const latestPaidInstallment = [...installments]
+        .filter((installment) => installment.paid_at)
+        .sort((a, b) => (b.paid_at ?? '').localeCompare(a.paid_at ?? ''))[0];
     const groupedMethods = [
         { title: 'Dompet Digital', methods: paymentMethods.filter((method) => ['gopay', 'ovo', 'dana'].includes(method.code)) },
         { title: 'Pembayaran Instan', methods: paymentMethods.filter((method) => method.code === 'qris') },
@@ -112,8 +142,6 @@ export default function TeKuModalIndex({
         );
     };
 
-    const claimVoucher = () => router.post('/tekumodal/vouchers');
-
     const copyVoucher = async (code: string) => {
         setCopyError(null);
         try {
@@ -124,6 +152,8 @@ export default function TeKuModalIndex({
             setCopyError('Kode tidak dapat disalin. Silakan salin secara manual.');
         }
     };
+
+    const redeemReward = (type: string) => router.post('/tekumodal/vouchers', { type });
 
     useEffect(() => {
         if (!loanSimulatorOpen) return;
@@ -137,9 +167,9 @@ export default function TeKuModalIndex({
 
     return (
         <ManagementLayout title="TeKuModal">
-            <div className="mx-auto max-w-[1180px] space-y-6">
+            <div className="mx-auto max-w-[1140px] space-y-5">
                 <header className="mb-1">
-                    <h1 className="text-3xl font-bold tracking-tight text-gray-900">TeKuModal</h1>
+                    <h1 className="text-2xl font-bold tracking-tight text-gray-900">TeKuModal</h1>
                 </header>
                 {successMessage && (
                     <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status">
@@ -157,103 +187,175 @@ export default function TeKuModalIndex({
                     </div>
                 )}
 
-                <section className="overflow-hidden rounded-2xl border border-neutral-200/50 shadow-sm" data-purpose="loan-banner">
-                    <div className="flex flex-col items-center bg-[#678263] px-6 py-8 text-center text-white">
-                        <h2 className="mb-1 text-base font-semibold tracking-wide text-white/95">Limit Tersedia</h2>
-                        <p className="mb-2 text-3xl font-bold tracking-tight sm:text-[34px]">{money(metrics.available_limit)}</p>
-                        <p className="mb-5 text-xs text-white/80">Total Limit {money(metrics.credit_limit)}</p>
+                <section
+                    className={`mb-6 overflow-hidden border border-black/5 bg-[#698165] text-white shadow-sm ${period === 'current' && loans.length === 0 ? 'rounded-xl' : 'rounded-t-xl'}`}
+                    data-purpose="loan-summary"
+                >
+                    <div className={`px-6 text-center ${period === 'current' && loans.length === 0 ? 'pt-8 pb-7' : 'pt-6 pb-5'}`}>
+                        <h2
+                            className={`font-semibold tracking-wide text-white ${period === 'current' && loans.length === 0 ? 'mb-1.5 text-base text-white/95' : 'mb-0.5 text-sm'}`}
+                        >
+                            Limit Tersedia
+                        </h2>
+                        <p
+                            className={`font-bold tracking-tight text-white ${period === 'current' && loans.length === 0 ? 'mb-2 text-3xl lg:text-4xl' : 'mb-1.5 text-[26px] md:text-[28px]'}`}
+                        >
+                            {money(metrics.available_limit)}
+                        </p>
+                        <p
+                            className={`font-normal text-white/85 ${period === 'current' && loans.length === 0 ? 'mb-5 text-xs' : 'mb-3 text-[10px]'}`}
+                        >
+                            Total Limit {money(metrics.credit_limit)}
+                        </p>
                         <Link
-                            className="mb-4 rounded-md bg-[#FBF6EE] px-6 py-2 text-xs font-semibold text-gray-900 shadow-sm transition hover:bg-white"
+                            className={`inline-block bg-white font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 ${period === 'current' && loans.length === 0 ? 'mb-4 rounded-full px-6 py-2 text-xs' : 'mb-3 rounded-sm px-4 py-1.5 text-[11px]'}`}
                             href="/tekumodal/loans/create"
                         >
                             Ajukan Pinjaman
                         </Link>
-                        <p className="mb-4 text-[11px] text-white/90">Fitur ini hanya simulasi, tidak ada pencairan dana.</p>
+                        <p
+                            className={`font-normal text-white/80 ${period === 'current' && loans.length === 0 ? 'mb-4 text-[11px]' : 'mb-3 text-[10px]'}`}
+                        >
+                            Kamu dapat mengajukan pinjaman modal menggunakan limit yang tersedia
+                        </p>
                         <button
-                            className="rounded-md bg-[#FBF6EE] px-4 py-2 text-xs font-semibold text-gray-900 shadow-sm transition hover:bg-white"
+                            className={`inline-flex items-center gap-1.5 bg-white font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 ${period === 'current' && loans.length === 0 ? 'rounded-full px-4 py-1.5 text-xs' : 'rounded-sm px-3 py-1 text-[10px]'}`}
                             onClick={() => setLoanSimulatorOpen(true)}
                             type="button"
                         >
-                            <i aria-hidden="true" className="fa-solid fa-calculator mr-2" />
+                            <i aria-hidden="true" className="fa-solid fa-calculator" />
                             Simulasi Pinjaman
                         </button>
                     </div>
-                </section>
-
-                <section className="overflow-hidden rounded-b-2xl border border-gray-100 bg-white shadow-sm" data-purpose="billing-tabs-container">
-                    <div
+                    <nav
                         aria-label="Periode tagihan"
-                        className="grid grid-cols-2 border-b border-gray-300 bg-[#EFE7DA]/70 text-sm font-bold text-gray-800"
+                        className={`grid grid-cols-2 border-t text-xs font-semibold ${period === 'current' && loans.length === 0 ? 'border-[#DDD8CE] bg-[#F7F2EB] text-gray-900' : 'border-[#5b7157]'}`}
                     >
                         {(['current', 'next'] as const).map((value) => (
                             <Link
                                 aria-current={period === value ? 'page' : undefined}
-                                className={`border-r border-gray-300 px-4 py-3 text-center transition-colors last:border-r-0 ${period === value ? 'bg-[#F5EFE6]' : 'text-gray-600 hover:bg-[#F2ECE0]'}`}
+                                className={`border-r text-center transition-colors last:border-r-0 ${
+                                    period === 'current' && loans.length === 0
+                                        ? `border-[#DDD8CE] py-3 ${period === value ? 'bg-[#F7F2EB] font-bold text-gray-900' : 'text-gray-800 hover:bg-amber-50/50'}`
+                                        : `border-[#ded3c5] py-2.5 ${period === value ? 'bg-[#eee6dc] font-bold text-slate-900' : 'bg-[#eee6dc]/70 font-medium text-slate-700 hover:bg-[#eee6dc]'}`
+                                }`}
                                 href={`/tekumodal?period=${value}`}
                                 key={value}
                             >
                                 {value === 'current' ? 'Tagihan Bulan Ini' : 'Tagihan Bulan Depan'}
                             </Link>
                         ))}
-                    </div>
-                    <div className="p-6 text-center sm:p-10">
-                        <h3 className="mb-2 text-xl font-bold text-gray-900">Tagihan {monthLabel}</h3>
+                    </nav>
+                </section>
+
+                {period === 'current' && (
+                    <section
+                        className={`-mt-6 mb-6 rounded-b-xl border border-t-0 border-stone-200/80 bg-white text-center shadow-sm ${
+                            loans.length === 0 ? 'p-16' : 'p-8'
+                        }`}
+                        data-purpose="current-bill-card"
+                    >
                         {allPaid ? (
-                            <div className="flex min-h-64 flex-col items-center justify-center">
-                                <i aria-hidden="true" className="fa-regular fa-circle-check mb-4 text-5xl text-[#688265]" />
-                                <p className="text-3xl font-bold tracking-tight text-neutral-900">Lunas</p>
-                                <p className="mt-2 text-sm text-gray-700">Semua tagihan periode ini telah dibayarkan.</p>
-                            </div>
+                            <>
+                                <h3 className="mb-6 text-base font-bold text-neutral-900">Tagihan Saat Ini</h3>
+                                <div className="mb-4 flex justify-center">
+                                    <div aria-hidden="true" className="relative inline-flex h-16 w-16 items-center justify-center text-[#688264]">
+                                        <svg
+                                            className="h-16 w-14"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth="2.5"
+                                            viewBox="0 0 48 56"
+                                        >
+                                            <path d="M6 4h26l10 10v36H6z" />
+                                            <path d="M32 4v10h10" />
+                                        </svg>
+                                        <span className="absolute -right-0.5 -bottom-1 rounded-full bg-white p-0.5">
+                                            <svg
+                                                className="h-6 w-6"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth="2.5"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <circle cx="12" cy="12" r="10" />
+                                                <path d="m8 12 3 3 5-5" />
+                                            </svg>
+                                        </span>
+                                    </div>
+                                </div>
+                                <h4 className="mb-2 text-2xl font-bold tracking-tight text-neutral-900">Lunas</h4>
+                                <p className="text-xs font-normal text-neutral-800">
+                                    Tagihan saat ini telah dibayarkan
+                                    {latestPaidInstallment?.paid_at ? ` pada ${date(latestPaidInstallment.paid_at)}` : '.'}
+                                </p>
+                            </>
                         ) : installments.length === 0 ? (
-                            <div className="flex min-h-[300px] flex-col items-center justify-center p-8 text-center">
-                                <p className="max-w-xl text-xs tracking-tight text-gray-700">
+                            <>
+                                <h3 className="mb-2 text-sm font-semibold text-slate-800">Tagihan Saat Ini</h3>
+                                <p className="text-[11px] text-gray-800">
                                     {loans.length === 0
                                         ? 'Kamu belum melakukan pinjaman. Ayo mulai lakukan peminjaman dan jalankan bisnis mu!'
-                                        : 'Tidak ada tagihan untuk periode ini.'}
+                                        : `Tidak ada tagihan untuk ${monthLabel}.`}
                                 </p>
-                            </div>
+                            </>
                         ) : (
-                            <div className="mx-auto max-w-3xl space-y-4 text-left">
-                                <div className="mb-5 text-center">
-                                    <p className="text-xs font-semibold text-gray-600">Total belum dibayar</p>
-                                    <p className="mt-1 text-3xl font-extrabold tracking-tight text-gray-950">{money(totalDue)}</p>
-                                </div>
-                                {installments.map((installment) => (
-                                    <article className="rounded-xl border border-stone-200 bg-[#FAF5ED] p-5" key={installment.id}>
-                                        <div className="flex flex-wrap items-start justify-between gap-3">
-                                            <div>
-                                                <h4 className="font-bold text-gray-900">Cicilan ke-{installment.number}</h4>
-                                                <p className="mt-1 text-xs text-gray-600">
-                                                    Pinjaman {money(installment.principal)} · Tenor {installment.term_months} bulan
-                                                </p>
-                                            </div>
-                                            <span
-                                                className={`rounded-full px-3 py-1 text-xs font-semibold ${installment.status === 'paid' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}
-                                            >
-                                                {installment.status === 'paid' ? 'Lunas' : 'Belum dibayar'}
+                            <>
+                                <h3 className="mb-2 text-sm font-semibold text-slate-800">Tagihan Saat Ini</h3>
+                                <p className="mb-2 text-[32px] font-bold tracking-wider text-slate-900 md:text-[34px]">{money(totalDue)}</p>
+                                <p className="mb-5 text-[11px] font-normal text-slate-600">
+                                    {firstUnpaidInstallment ? `Jatuh tempo ${date(firstUnpaidInstallment.due_date)}` : monthLabel}
+                                </p>
+                                {firstUnpaidInstallment && (
+                                    <div className="mx-auto max-w-[360px]">
+                                        <button
+                                            className="mb-5 flex w-full items-center justify-between rounded bg-[#d7dadb] px-3 py-1.5 text-left text-[10px] font-medium text-slate-800 shadow-inner transition hover:bg-[#cfd2d4]"
+                                            onClick={() => setMethodModalOpen(true)}
+                                            type="button"
+                                        >
+                                            <span>Pilih metode pembayaran</span>
+                                            <span className="flex items-center gap-1 font-semibold text-slate-900">
+                                                {selectedMethod?.label ?? 'Pilih'}
+                                                <i aria-hidden="true" className="fa-solid fa-chevron-right text-[9px]" />
                                             </span>
-                                        </div>
-                                        <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
-                                            <div>
-                                                <p className="text-2xl font-bold text-gray-950">{money(installment.amount)}</p>
-                                                <p className="mt-1 text-xs font-medium text-gray-600">Jatuh tempo {date(installment.due_date)}</p>
-                                            </div>
-                                            {installment.status === 'paid' ? (
-                                                <p className="text-xs font-semibold text-emerald-800">
-                                                    Dibayar {installment.paid_at ? date(installment.paid_at) : ''}
-                                                </p>
-                                            ) : (
-                                                <div className="flex flex-wrap items-center gap-2">
+                                        </button>
+                                        <button
+                                            className="w-28 rounded bg-[#698165] py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-[#5a7156] disabled:opacity-60"
+                                            disabled={processingInstallment !== null || !paymentMethod}
+                                            onClick={() => payInstallment(firstUnpaidInstallment.id)}
+                                            type="button"
+                                        >
+                                            {processingInstallment === firstUnpaidInstallment.id
+                                                ? 'Memproses...'
+                                                : firstUnpaidInstallment.latest_payment?.status === 'pending'
+                                                  ? 'Lanjutkan'
+                                                  : 'Bayar'}
+                                        </button>
+                                    </div>
+                                )}
+                                {installments.length > 1 && (
+                                    <div className="mx-auto mt-7 max-w-3xl space-y-2 border-t border-stone-200 pt-5 text-left">
+                                        <h4 className="mb-3 text-xs font-bold text-slate-800">Rincian tagihan</h4>
+                                        {installments.map((installment) => (
+                                            <article
+                                                className="flex flex-wrap items-center justify-between gap-3 rounded border border-stone-200 px-4 py-3"
+                                                key={installment.id}
+                                            >
+                                                <div>
+                                                    <p className="text-xs font-bold text-slate-900">Cicilan ke-{installment.number}</p>
+                                                    <p className="mt-1 text-[10px] text-slate-600">
+                                                        {money(installment.amount)} · Jatuh tempo {date(installment.due_date)}
+                                                    </p>
+                                                </div>
+                                                {installment.status === 'paid' ? (
+                                                    <span className="text-[10px] font-semibold text-emerald-700">Lunas</span>
+                                                ) : (
                                                     <button
-                                                        className="rounded-md bg-[#C5CECA] px-4 py-2 text-xs font-semibold text-gray-900 transition hover:bg-[#B7C0BC]"
-                                                        onClick={() => setMethodModalOpen(true)}
-                                                        type="button"
-                                                    >
-                                                        {selectedMethod?.label ?? 'Pilih metode pembayaran'}{' '}
-                                                        <i aria-hidden="true" className="fa-solid fa-chevron-right ml-2" />
-                                                    </button>
-                                                    <button
-                                                        className="rounded-md bg-[#6B8466] px-6 py-2 text-sm font-bold text-white shadow-sm transition hover:bg-[#596E54] disabled:opacity-60"
+                                                        className="rounded border border-[#698165] px-3 py-1 text-[10px] font-semibold text-[#4f684a] hover:bg-[#f6f3ed] disabled:opacity-60"
                                                         disabled={processingInstallment !== null || !paymentMethod}
                                                         onClick={() => payInstallment(installment.id)}
                                                         type="button"
@@ -261,100 +363,244 @@ export default function TeKuModalIndex({
                                                         {processingInstallment === installment.id
                                                             ? 'Memproses...'
                                                             : installment.latest_payment?.status === 'pending'
-                                                              ? 'Lanjutkan checkout'
+                                                              ? 'Lanjutkan'
                                                               : 'Bayar'}
                                                     </button>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </article>
-                                ))}
-                                <p className="text-center text-xs text-gray-500">
+                                                )}
+                                            </article>
+                                        ))}
+                                    </div>
+                                )}
+                                <p className="mt-5 text-[10px] text-gray-500">
                                     Pembayaran hanya menggunakan Midtrans Sandbox dan tidak memproses uang sungguhan.
                                 </p>
-                            </div>
+                            </>
                         )}
-                    </div>
-                </section>
+                    </section>
+                )}
 
-                <section className="rounded-xl border border-neutral-200/50 bg-white p-6 shadow-sm" data-purpose="monthly-streak">
-                    <h3 className="text-sm font-bold text-gray-900">Bayar tepat waktu untuk mendapatkan bonus XP</h3>
-                    <p className="mt-1 text-xs text-gray-600">Setiap cicilan yang dibayar paling lambat pada tanggal jatuh tempo menambah 20 XP.</p>
-                    <div aria-label="Riwayat pembayaran 5 bulan terakhir" className="mt-5 flex gap-5">
-                        {metrics.streak.map((paid, index) => (
-                            <div className="flex flex-col items-center gap-1" key={index}>
-                                <i
-                                    aria-hidden="true"
-                                    className={`fa-regular fa-calendar-check text-xl ${paid ? 'text-[#678263]' : 'text-gray-400'}`}
-                                />
-                                <span className="text-[10px] text-gray-500">{paid ? 'Lunas' : '—'}</span>
-                            </div>
-                        ))}
-                    </div>
-                </section>
+                {period === 'next' && (
+                    <section
+                        className="-mt-6 mb-6 rounded-b-xl border border-t-0 border-stone-200/80 bg-white px-6 py-10 text-center shadow-sm sm:py-14"
+                        data-purpose="next-bill-card"
+                    >
+                        <h3 className="mb-4 text-base font-semibold text-gray-900">Tagihan Bulan Depan</h3>
+                        {installments.length === 0 ? (
+                            <p className="mx-auto max-w-xl py-5 text-xs text-gray-800">
+                                {loans.length === 0
+                                    ? 'Kamu belum melakukan pinjaman. Ayo mulai lakukan peminjaman dan jalankan bisnis mu!'
+                                    : `Tidak ada tagihan untuk ${monthLabel}.`}
+                            </p>
+                        ) : (
+                            <>
+                                <p className="mb-3 text-3xl font-extrabold tracking-tight text-gray-900 lg:text-[38px]">
+                                    {money(installments.reduce((total, installment) => total + installment.amount, 0))}
+                                </p>
+                                <p className="text-xs font-medium text-gray-800">
+                                    Jatuh tempo {nextDueInstallment ? date(nextDueInstallment.due_date) : monthLabel}
+                                </p>
+                                {installments.length > 1 && (
+                                    <div className="mx-auto mt-6 max-w-3xl space-y-2 border-t border-stone-200 pt-5 text-left">
+                                        {installments.map((installment) => (
+                                            <div className="flex flex-wrap items-center justify-between gap-3 px-2 py-2 text-xs" key={installment.id}>
+                                                <span className="font-semibold text-gray-800">Cicilan ke-{installment.number}</span>
+                                                <span className="text-gray-600">{money(installment.amount)}</span>
+                                                <span className="text-gray-600">Jatuh tempo {date(installment.due_date)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </section>
+                )}
 
-                <section className="rounded-xl border border-neutral-200/50 bg-white p-6 shadow-sm" data-purpose="reward-progress">
-                    <h3 className="text-sm font-bold text-gray-900">Tukarkan 100 XP untuk voucher diskon sewa tenant 20%</h3>
-                    <p className="mt-1 text-xs leading-relaxed text-gray-600">
-                        Voucher berupa kode simulasi satu kali klaim. Modul pembayaran sewa tenant belum terintegrasi, jadi kode ini belum dapat
-                        digunakan untuk memotong transaksi sewa.
+                <section className="rounded-xl border border-neutral-100/60 bg-white p-5 shadow-sm" data-purpose="monthly-streak">
+                    <h3 className="text-sm font-bold text-neutral-900">Streak Bulanan</h3>
+                    <p className="mt-1 mb-4 text-[11px] text-neutral-800">
+                        Bayar secara teratur setiap bulan tanpa terlambat untuk mendapatkan bonus XP agar kamu bisa semakin cepat mendapatkan voucher!
                     </p>
-                    <div className="mt-5 max-w-2xl">
-                        <div className="mb-1.5 flex justify-between text-xs font-bold text-gray-700">
+                    <div className="overflow-hidden rounded">
+                        <TeKuModalConstellation xp={metrics.xp} />
+                    </div>
+                </section>
+
+                <section className="rounded-xl border border-neutral-100/60 bg-white p-5 shadow-sm" data-purpose="reward-progress">
+                    <h3 className="text-xs leading-snug font-bold text-neutral-900">
+                        Bayar secara rutin dan dapatkan voucher potongan untuk sewa tenant atau diskon bunga untuk tagihan berikutnya!
+                    </h3>
+                    <p className="mt-1 mb-3 text-[11px] leading-relaxed text-neutral-700">
+                        Ayo bayar secara teratur setiap bulan tanpa terlambat, dan dapatkan voucher potongan untuk sewa tenant atau diskon bunga untuk
+                        tagihan berikutnya. Setiap 100 XP dari cicilan tepat waktu memberikan 120 TekuPoint.
+                    </p>
+                    <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[11px] font-bold text-neutral-900">
                             <span>{metrics.xp}/100 XP</span>
-                            <span>{metrics.paid_installments} cicilan tepat waktu</span>
+                            <span className="font-normal text-neutral-700">+{metrics.points_per_reward} TekuPoint / 100 XP</span>
                         </div>
                         <div
                             aria-label={`${metrics.xp} dari 100 XP`}
-                            className="h-2.5 w-full overflow-hidden rounded-full bg-[#E5E7EB]"
+                            className="h-2 w-full overflow-hidden rounded-full bg-neutral-200"
                             role="progressbar"
                             aria-valuemax={100}
                             aria-valuemin={0}
                             aria-valuenow={metrics.xp}
                         >
-                            <div className="h-full rounded-full bg-[#678263]" style={{ width: `${metrics.xp}%` }} />
+                            <div className="h-full rounded-full bg-[#698165]" style={{ width: `${metrics.xp}%` }} />
                         </div>
                     </div>
-                    <div className="mt-5 flex flex-wrap items-center gap-3">
-                        <button
-                            className="rounded-md bg-[#6B8466] px-6 py-2 text-xs font-semibold text-white transition hover:bg-[#596E54] disabled:cursor-not-allowed disabled:opacity-50"
-                            disabled={!metrics.can_claim_voucher}
-                            onClick={claimVoucher}
-                            type="button"
-                        >
-                            Klaim voucher 20%
-                        </button>
-                        {!metrics.can_claim_voucher && (
-                            <span className="text-xs text-gray-600">Bayar 5 cicilan tepat waktu untuk membuka voucher.</span>
-                        )}
-                    </div>
-                    {vouchers.length > 0 && (
-                        <div className="mt-5 space-y-2">
-                            <h4 className="text-xs font-bold text-gray-800">Voucher sewa yang sudah diklaim</h4>
-                            {vouchers.map((voucher) => (
-                                <div className="flex flex-wrap items-center gap-3 rounded-lg bg-[#F6EFE5] px-4 py-3" key={voucher.id}>
-                                    <code className="font-bold tracking-wide text-gray-900">{voucher.code}</code>
-                                    <span className="text-xs text-gray-600">
-                                        Diskon {voucher.discount_percentage}% ·{' '}
-                                        {voucher.status === 'available' ? 'Belum digunakan' : 'Sudah digunakan'}
-                                    </span>
-                                    <button
-                                        className="ml-auto rounded border border-[#688265] px-3 py-1 text-xs font-semibold text-[#52704d] hover:bg-white"
-                                        onClick={() => copyVoucher(voucher.code)}
-                                        type="button"
-                                    >
-                                        {copiedVoucher === voucher.code ? 'Tersalin' : 'Salin kode'}
-                                    </button>
-                                </div>
-                            ))}
-                            {copyError && (
-                                <p className="text-xs text-red-600" role="alert">
-                                    {copyError}
-                                </p>
-                            )}
-                        </div>
+                    {errors.voucher && (
+                        <p className="mt-3 text-xs text-red-600" role="alert">
+                            {errors.voucher}
+                        </p>
                     )}
                 </section>
+
+                <section className="mt-6 mb-8" data-purpose="voucher-rewards-section">
+                    <div className="mb-4 flex justify-end">
+                        <div className="inline-flex items-center gap-2 rounded-sm border border-[#698165] bg-white px-3 py-1 text-xs font-medium text-neutral-800 shadow-sm">
+                            <span className="flex h-4 w-4 items-center justify-center rounded-full border border-[#698165] text-[10px] font-bold text-[#698165]">
+                                T
+                            </span>
+                            <span>TekuPoint: {metrics.points_balance} Point</span>
+                        </div>
+                    </div>
+                    <div className="space-y-3.5">
+                        {rewards.map((reward) => {
+                            const ownedVoucher = reward.owned_voucher_id
+                                ? vouchers.find((voucher) => voucher.id === reward.owned_voucher_id)
+                                : undefined;
+                            const priorVoucher = vouchers.find((voucher) => voucher.type === reward.type);
+                            const actionClass =
+                                'rounded border border-neutral-800 px-5 py-1 text-xs font-normal text-neutral-800 transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50';
+
+                            return (
+                                <article
+                                    className="flex min-h-[76px] overflow-hidden rounded-md border border-neutral-200/70 bg-white shadow-sm"
+                                    key={reward.type}
+                                >
+                                    <div className="flex w-24 shrink-0 flex-col items-center justify-center border-r border-dashed border-white/40 bg-[#698165] p-2 text-center text-white">
+                                        <i
+                                            aria-hidden="true"
+                                            className={`mb-1 text-xl ${reward.category === 'tenant' ? 'fa-solid fa-ticket' : 'fa-solid fa-coins'}`}
+                                        />
+                                        <span className="text-[9.5px] leading-tight font-medium">
+                                            {reward.category === 'tenant' ? 'Voucher Tenant' : 'Voucher TeKuModal'}
+                                        </span>
+                                    </div>
+                                    <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3 p-3">
+                                        <div className="space-y-0.5">
+                                            <h4 className="text-xs font-bold text-neutral-900">{reward.title}</h4>
+                                            <p className="text-[11px] text-neutral-800">{reward.description}</p>
+                                            <p className="text-[10px] text-blue-600">S&amp;K Berlaku</p>
+                                            {ownedVoucher && (
+                                                <code className="block text-[10px] break-all text-neutral-700">{ownedVoucher.code}</code>
+                                            )}
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            {reward.points_cost > 0 && (
+                                                <span className="rounded border border-neutral-300 px-2.5 py-1 text-[11px] text-neutral-800">
+                                                    {reward.points_cost} TekuPoint
+                                                </span>
+                                            )}
+                                            {ownedVoucher?.status === 'available' && reward.category === 'loan' ? (
+                                                <Link className={actionClass} href={`/tekumodal/loans/create?voucher_id=${ownedVoucher.id}`}>
+                                                    Pakai
+                                                </Link>
+                                            ) : ownedVoucher?.status === 'available' ? (
+                                                <button className={actionClass} onClick={() => copyVoucher(ownedVoucher.code)} type="button">
+                                                    {copiedVoucher === ownedVoucher.code ? 'Tersalin' : 'Salin'}
+                                                </button>
+                                            ) : priorVoucher?.status === 'expired' ? (
+                                                <button className={actionClass} disabled type="button">
+                                                    Tidak berlaku
+                                                </button>
+                                            ) : reward.has_owned_voucher ? (
+                                                <button className={actionClass} disabled type="button">
+                                                    Sudah dipakai
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    className={actionClass}
+                                                    disabled={!reward.can_redeem}
+                                                    onClick={() => redeemReward(reward.type)}
+                                                    type="button"
+                                                >
+                                                    {reward.first_loan_only ? 'Pakai' : 'Tukar'}
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </article>
+                            );
+                        })}
+                    </div>
+                    {copyError && (
+                        <p className="mt-2 text-xs text-red-600" role="alert">
+                            {copyError}
+                        </p>
+                    )}
+                    <p className="mt-3 text-[10px] text-neutral-600">
+                        Kode voucher tenant dapat disalin; penggunaan pada transaksi sewa belum terhubung di sistem.
+                    </p>
+                </section>
+
+                {vouchers.length > 0 && (
+                    <section className="mb-8 space-y-3" data-purpose="voucher-wallet">
+                        <h3 className="text-sm font-bold text-neutral-900">Voucher Saya</h3>
+                        {vouchers.map((voucher) => {
+                            const reward = rewards.find((item) => item.type === voucher.type);
+                            return (
+                                <article
+                                    className="flex min-h-[76px] overflow-hidden rounded-md border border-neutral-200/70 bg-white shadow-sm"
+                                    key={voucher.id}
+                                >
+                                    <div className="flex w-24 shrink-0 flex-col items-center justify-center border-r border-dashed border-white/40 bg-[#698165] p-2 text-center text-white">
+                                        <i aria-hidden="true" className="fa-solid fa-ticket mb-1 text-xl" />
+                                        <span className="text-[9.5px] leading-tight font-medium">
+                                            {reward?.category === 'tenant' ? 'Voucher Tenant' : 'Voucher TeKuModal'}
+                                        </span>
+                                    </div>
+                                    <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3 p-3">
+                                        <div>
+                                            <h4 className="text-xs font-bold text-neutral-900">{reward?.title ?? 'Voucher TeKuModal'}</h4>
+                                            <code className="mt-1 block text-[11px] break-all text-neutral-800">{voucher.code}</code>
+                                            <p className="mt-0.5 text-[10px] text-neutral-700">
+                                                {voucher.status === 'available'
+                                                    ? 'Tersedia'
+                                                    : voucher.status === 'reserved'
+                                                      ? 'Sedang dipakai untuk checkout'
+                                                      : voucher.status === 'expired'
+                                                        ? 'Tidak berlaku'
+                                                        : 'Sudah digunakan'}
+                                            </p>
+                                        </div>
+                                        {voucher.status === 'available' && (
+                                            <div className="flex gap-2">
+                                                {reward?.category === 'loan' ? (
+                                                    <Link
+                                                        className="rounded border border-neutral-800 px-4 py-1 text-xs text-neutral-800 hover:bg-neutral-100"
+                                                        href={`/tekumodal/loans/create?voucher_id=${voucher.id}`}
+                                                    >
+                                                        Pakai
+                                                    </Link>
+                                                ) : (
+                                                    <button
+                                                        className="rounded border border-neutral-800 px-4 py-1 text-xs text-neutral-800 hover:bg-neutral-100"
+                                                        onClick={() => copyVoucher(voucher.code)}
+                                                        type="button"
+                                                    >
+                                                        {copiedVoucher === voucher.code ? 'Tersalin' : 'Salin kode'}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                </article>
+                            );
+                        })}
+                    </section>
+                )}
 
                 <section className="rounded-xl border border-neutral-200/50 bg-white p-6 shadow-sm">
                     <div className="flex flex-wrap items-center justify-between gap-3">

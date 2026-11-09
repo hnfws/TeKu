@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\Event;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Tenant extends Model
 {
@@ -18,5 +18,10 @@ class Tenant extends Model
     public function event()
     {
         return $this->belongsTo(Event::class);
+    }
+
+    public function bookings(): HasMany
+    {
+        return $this->hasMany(TenantBooking::class);
     }
 }

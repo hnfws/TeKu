@@ -118,6 +118,7 @@ class EventController extends Controller
     public function show(Request $request, Event $event): Response
     {
         $event->load('tenants');
+        $tenantIds = $event->tenants->pluck('id');
 
         return Inertia::render('events/show', [
             'event' => $event,
@@ -129,6 +130,35 @@ class EventController extends Controller
                 ->whereNotNull('deadline_date')
                 ->whereDate('deadline_date', '<', now()->toDateString())
                 ->exists(),
+            'tenantVouchers' => $request->user()->tekumodalVouchers()
+                ->where('status', 'available')
+                ->whereIn('type', ['tenant_discount_10', 'tenant_discount_20'])
+                ->get(['id', 'type', 'discount_percentage', 'max_discount_amount'])
+                ->map(fn ($voucher) => [
+                    'id' => $voucher->id,
+                    'type' => $voucher->type,
+                    'discount_percentage' => $voucher->discount_percentage,
+                    'max_discount_amount' => $voucher->max_discount_amount,
+                    'title' => collect(config('tekumodal.rewards'))->firstWhere('type', $voucher->type)['title'],
+                ]),
+            'tenantPaymentMethods' => collect(config('tekumodal.payment_methods'))
+                ->map(fn (string $code, string $label) => ['label' => $label, 'code' => $code])
+                ->values(),
+            'tenantBookings' => $request->user()->tenantBookings()
+                ->with('tenant:id,event_id')
+                ->whereIn('tenant_id', $tenantIds)
+                ->latest()
+                ->limit(5)
+                ->get(['id', 'tenant_id', 'voucher_id', 'base_amount', 'discount_amount', 'amount', 'status', 'created_at'])
+                ->map(fn ($booking) => [
+                    'id' => $booking->id,
+                    'tenant_id' => $booking->tenant_id,
+                    'base_amount' => $booking->base_amount,
+                    'discount_amount' => $booking->discount_amount,
+                    'amount' => $booking->amount,
+                    'status' => $booking->status,
+                    'created_at' => $booking->created_at,
+                ]),
         ]);
     }
 
