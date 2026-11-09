@@ -3,65 +3,67 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules;
 use Illuminate\Validation\ValidationException;
-use Inertia\Inertia;
-use Inertia\Response;
 
 class NewPasswordController extends Controller
 {
     /**
-     * Show the password reset page.
-     */
-    public function create(Request $request): Response
-    {
-        return Inertia::render('auth/reset-password', [
-            'email' => $request->email,
-            'token' => $request->route('token'),
-        ]);
-    }
-
-    /**
-     * Handle an incoming new password request.
-     *
-     * @throws \Illuminate\Validation\ValidationException
+     * Verify the reset code and set a new password.
      */
     public function store(Request $request): RedirectResponse
     {
         $request->validate([
-            'token' => 'required',
-            'email' => 'required|email',
+            'otp' => ['required', 'digits:6'],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
 
-        // Here we will attempt to reset the user's password. If it is successful we
-        // will update the password on an actual user model and persist it to the
-        // database. Otherwise we will parse the error and return the response.
-        $status = Password::reset(
-            $request->only('email', 'password', 'password_confirmation', 'token'),
-            function ($user) use ($request) {
-                $user->forceFill([
-                    'password' => Hash::make($request->password),
-                    'remember_token' => Str::random(60),
-                ])->save();
-
-                event(new PasswordReset($user));
-            }
-        );
-
-        // Show the password-changed confirmation after a successful reset.
-        if ($status == Password::PasswordReset) {
-            return to_route('password.success');
+        $email = $request->session()->get('password_reset_email');
+        if (! $email) {
+            throw ValidationException::withMessages([
+                'otp' => 'Silakan minta kode OTP terlebih dahulu.',
+            ]);
         }
 
-        throw ValidationException::withMessages([
-            'email' => [__($status)],
-        ]);
+        $user = DB::transaction(function () use ($email, $request) {
+            $reset = DB::table('password_reset_tokens')
+                ->where('email', $email)
+                ->lockForUpdate()
+                ->first();
+
+            if (
+                ! $reset
+                || ! $reset->created_at
+                || Carbon::parse($reset->created_at)->addMinutes(10)->isPast()
+                || ! Hash::check($request->string('otp')->toString(), $reset->token)
+            ) {
+                throw ValidationException::withMessages([
+                    'otp' => 'Kode OTP salah atau sudah kedaluwarsa.',
+                ]);
+            }
+
+            $user = User::query()->where('email', $email)->firstOrFail();
+            $user->forceFill([
+                'password' => $request->string('password')->toString(),
+                'remember_token' => Str::random(60),
+            ])->save();
+
+            DB::table('password_reset_tokens')->where('email', $email)->delete();
+
+            return $user;
+        });
+
+        $request->session()->forget(['password_reset_email', 'password_reset_otp_sent']);
+        event(new PasswordReset($user));
+
+        return to_route('password.success');
     }
 }

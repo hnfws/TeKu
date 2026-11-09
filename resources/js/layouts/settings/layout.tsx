@@ -12,7 +12,7 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
     const currentPath = url.split('?')[0];
 
     return (
-        <div className="mx-auto max-w-[1440px] space-y-8">
+        <div className="settings-light mx-auto max-w-[1440px] space-y-8">
             <header>
                 <h1 className="text-3xl font-semibold tracking-tight text-stone-900">Pengaturan</h1>
             </header>

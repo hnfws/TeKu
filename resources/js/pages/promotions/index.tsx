@@ -32,13 +32,14 @@ interface PromotionsProps {
 
 const fieldClass = 'h-10 w-full rounded-lg border-0 bg-[#D9D9D9] px-3 text-sm text-neutral-800 placeholder:text-neutral-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#637D60]/30';
 const money = (value: string | number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value) || 0);
+const localDateTimeToIso = (value: string) => (value ? new Date(value).toISOString() : '');
 
 export default function PromotionsIndex({ promotions, filters, metrics }: PromotionsProps) {
     const emptyForm: PromotionForm = {
         code: '',
         discount_type: 'percent',
         discount_value: 10,
-        minimum_purchase: '',
+        minimum_purchase: 0,
         maximum_discount: '',
         starts_at: '',
         ends_at: '',
@@ -54,6 +55,11 @@ export default function PromotionsIndex({ promotions, filters, metrics }: Promot
 
     const submit = (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
+        form.transform((data) => ({
+            ...data,
+            starts_at: localDateTimeToIso(data.starts_at),
+            ends_at: localDateTimeToIso(data.ends_at),
+        }));
         form.post('/promotions', { onSuccess: resetForm });
     };
 

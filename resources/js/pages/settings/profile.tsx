@@ -71,7 +71,7 @@ export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: 
                                             type="button"
                                             variant="ghost"
                                             size="icon"
-                                            className="h-8 w-8 text-stone-500 hover:text-stone-900"
+                                            className="h-8 w-8 text-stone-500 hover:bg-stone-100 hover:text-stone-900"
                                             aria-label={`${isEditing ? 'Selesai mengedit' : 'Edit'} ${label}`}
                                             title={`Edit ${label}`}
                                             onClick={() =>
@@ -148,6 +148,7 @@ export default function Profile({ mustVerifyEmail, status }: { mustVerifyEmail: 
                                 <Button
                                     type="button"
                                     variant="outline"
+                                    className="border-stone-300 bg-white text-stone-900 hover:bg-stone-50 hover:text-stone-900"
                                     disabled={processing}
                                     onClick={() => {
                                         setData({
