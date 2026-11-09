@@ -12,14 +12,18 @@ test('profile page is displayed', function () {
     $response->assertOk();
 });
 
-test('profile information can be updated', function () {
+test('profile information can be updated without changing account contact information', function () {
     $user = User::factory()->create();
+    $email = $user->email;
 
     $response = $this
         ->actingAs($user)
         ->patch('/settings/profile', [
             'name' => 'Test User',
-            'email' => 'test@example.com',
+            'email' => 'changed@example.com',
+            'business_name' => 'Kedai Test',
+            'business_type' => 'Kuliner',
+            'address' => 'Jalan Merdeka 10',
         ]);
 
     $response
@@ -29,25 +33,37 @@ test('profile information can be updated', function () {
     $user->refresh();
 
     expect($user->name)->toBe('Test User');
-    expect($user->email)->toBe('test@example.com');
-    expect($user->email_verified_at)->toBeNull();
+    expect($user->email)->toBe($email);
+    expect($user->business_name)->toBe('Kedai Test');
+    expect($user->business_type)->toBe('Kuliner');
+    expect($user->address)->toBe('Jalan Merdeka 10');
+    expect($user->email_verified_at)->not->toBeNull();
 });
 
-test('email verification status is unchanged when the email address is unchanged', function () {
+test('profile fields can be cleared', function () {
     $user = User::factory()->create();
+    $user->update([
+        'business_name' => 'Kedai Test',
+        'business_type' => 'Kuliner',
+        'address' => 'Jalan Merdeka 10',
+    ]);
 
     $response = $this
         ->actingAs($user)
         ->patch('/settings/profile', [
-            'name' => 'Test User',
-            'email' => $user->email,
+            'name' => $user->name,
+            'business_name' => null,
+            'business_type' => null,
+            'address' => null,
         ]);
 
     $response
         ->assertSessionHasNoErrors()
         ->assertRedirect('/settings/profile');
 
-    expect($user->refresh()->email_verified_at)->not->toBeNull();
+    expect($user->refresh()->business_name)->toBeNull();
+    expect($user->business_type)->toBeNull();
+    expect($user->address)->toBeNull();
 });
 
 test('user can delete their account', function () {

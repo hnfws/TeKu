@@ -7,6 +7,7 @@ use App\Models\LoanApplication;
 use App\Models\LoanInstallment;
 use App\Models\TeKuModalVoucher;
 use App\Models\User;
+use App\Http\Requests\Settings\StoreBankAccountRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -223,18 +224,9 @@ class TeKuModalController extends Controller
         ]);
     }
 
-    public function storeBankAccount(Request $request): RedirectResponse
+    public function storeBankAccount(StoreBankAccountRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'account_holder' => ['required', 'string', 'max:255'],
-            'account_number' => ['required', 'string', 'regex:/^[0-9 -]{5,34}$/'],
-            'bank_name' => ['required', Rule::in(config('tekumodal.banks'))],
-            'branch_name' => ['nullable', 'string', 'max:150'],
-            'city' => ['nullable', 'string', 'max:100'],
-        ]);
-        $validated['account_number'] = preg_replace('/[\s-]/', '', $validated['account_number']);
-
-        $request->user()->bankAccounts()->create($validated);
+        $request->user()->bankAccounts()->create($request->normalizedData());
 
         return to_route('tekumodal.index')->with('success', 'Rekening bank berhasil disimpan secara terenkripsi.');
     }
