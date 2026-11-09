@@ -18,6 +18,7 @@ const navigation = [
 export default function ManagementSidebar({ className = '', onNavigate }: ManagementSidebarProps) {
     const { url, props } = usePage<{ auth: { user: { email: string } } }>();
     const path = url.split('?')[0];
+    const settingsActive = path.startsWith('/settings');
     const [collapsed, setCollapsed] = useState(false);
 
     return (
@@ -60,7 +61,8 @@ export default function ManagementSidebar({ className = '', onNavigate }: Manage
                         );
                     })}
                     <Link
-                        className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-white/90 transition-colors hover:bg-white/10 hover:text-white ${collapsed ? 'justify-center' : ''}`}
+                        aria-current={settingsActive ? 'page' : undefined}
+                        className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm transition-colors ${settingsActive ? 'bg-[#f6f2ec] font-bold text-gray-900 shadow-sm' : 'font-medium text-white/90 hover:bg-white/10 hover:text-white'} ${collapsed ? 'justify-center' : ''}`}
                         href="/settings/profile"
                         onClick={onNavigate}
                         title={collapsed ? 'Pengaturan' : undefined}
