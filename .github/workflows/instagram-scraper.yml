@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: '17 1,13 * * *'
   workflow_dispatch:
+    inputs:
+      refresh_existing:
+        description: Re-scrape posts from the last 3 months and update matching events
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -42,6 +48,9 @@ jobs:
       - name: Install scraper dependencies
         run: python -m pip install -r scraper/requirements.txt
 
+      - name: Test caption parsing
+        run: python -m unittest discover -s scraper/tests -v
+
       - name: Install Playwright browser
         run: python -m playwright install --with-deps chromium
 
@@ -50,3 +59,4 @@ jobs:
         env:
           LARAVEL_API_URL: ${{ secrets.LARAVEL_API_URL }}
           SCRAPER_API_TOKEN: ${{ secrets.SCRAPER_API_TOKEN }}
+          SCRAPER_REFRESH_EXISTING: ${{ inputs.refresh_existing }}

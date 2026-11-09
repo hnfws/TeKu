@@ -60,6 +60,9 @@ it('scores priority events and stores recognized deadlines', function () {
         $table->decimal('longitude', 11, 8);
         $table->string('source_url')->nullable();
         $table->string('source_account')->nullable();
+        $table->string('organizer_name')->nullable();
+        $table->text('description')->nullable();
+        $table->unsignedBigInteger('price')->nullable();
         $table->unsignedSmallInteger('priority_score')->default(0);
         $table->boolean('is_priority')->default(false);
         $table->timestamps();
@@ -88,9 +91,22 @@ it('scores priority events and stores recognized deadlines', function () {
             'deadline_date' => now()->addDays(2)->toISOString(),
             'start_date' => now()->addDays(7)->toISOString(),
             'end_date' => now()->addDays(7)->addHours(4)->toISOString(),
+            'price' => 50000,
+            'tenant_price' => 1500000,
         ]);
         $job->handle();
-        $job->handle();
+        (new ProcessScrapedEvent([
+            'title' => 'Updated Tenant Call',
+            'description' => 'Limited slot at ICE BSD, updated booth details.',
+            'location_name' => 'Jakarta',
+            'latitude' => -6.2,
+            'longitude' => 106.8,
+            'instagram_post_url' => 'https://www.instagram.com/p/priority-test/',
+            'account_name' => 'pestapora',
+            'start_date' => now()->addDays(10)->toISOString(),
+            'end_date' => now()->addDays(10)->addHours(4)->toISOString(),
+            'tenant_price' => 2000000,
+        ]))->handle();
 
         (new ProcessScrapedEvent([
             'title' => 'General Vendor Applications',
@@ -105,9 +121,12 @@ it('scores priority events and stores recognized deadlines', function () {
         expect(Event::query()->count())->toBe(2)
             ->and(Event::query()->first()->priority_score)->toBe(100)
             ->and(Event::query()->first()->is_priority)->toBeTrue()
+            ->and(Event::query()->first()->title)->toBe('Updated Tenant Call')
             ->and(Event::query()->first()->start_date)->not->toBeNull()
+            ->and((int) Event::query()->first()->price)->toBe(50000)
             ->and(Event::query()->where('source_account', 'info.tenant')->first()->is_priority)->toBeFalse()
             ->and(Event::query()->where('source_account', 'info.tenant')->first()->start_date)->toBeNull()
+            ->and((int) Tenant::query()->first()->price)->toBe(2000000)
             ->and(Carbon::parse(Tenant::query()->first()->deadline_date)->isFuture())->toBeTrue();
     } finally {
         Schema::dropIfExists('event_tenants');

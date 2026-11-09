@@ -53,6 +53,7 @@ class EventController extends Controller
     public function index(Request $request): Response
     {
         $events = Event::query()
+            ->with(['tenants:id,event_id,price,tenant_type'])
             ->when($request->filled('search'), fn ($query) => $query->where('title', 'like', '%'.$request->string('search')->toString().'%'))
             ->when($request->filled('category'), fn ($query) => $query->where('category', $request->query('category')))
             ->orderBy('start_date')

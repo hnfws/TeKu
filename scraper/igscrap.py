@@ -2,7 +2,7 @@ import os
 import re
 import time
 from calendar import monthrange
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
@@ -15,6 +15,7 @@ load_dotenv(dotenv_path=Path(__file__).with_name(".env"))
 LARAVEL_API_URL = os.getenv("LARAVEL_API_URL", "http://localhost:8000/api/scraped-events")
 API_TOKEN = os.getenv("SCRAPER_API_TOKEN")
 API_TIMEOUT_SECONDS = 120
+REFRESH_EXISTING = os.getenv("SCRAPER_REFRESH_EXISTING", "").casefold() == "true"
 
 
 def api_endpoint(suffix=""):
@@ -62,6 +63,55 @@ TRIGGER_KEYWORDS = [
 TIMELINE_MONTHS = 3
 PROFILE_SCROLL_PAUSE_MS = 1500
 MAX_STALLED_SCROLLS = 3
+MONTH_NAMES = {
+    "jan": 1, "januari": 1, "january": 1,
+    "feb": 2, "februari": 2, "february": 2,
+    "mar": 3, "maret": 3, "march": 3,
+    "apr": 4, "april": 4,
+    "mei": 5, "may": 5,
+    "jun": 6, "juni": 6, "june": 6,
+    "jul": 7, "juli": 7, "july": 7,
+    "agu": 8, "agustus": 8, "aug": 8, "august": 8,
+    "sep": 9, "september": 9,
+    "okt": 10, "oktober": 10, "oct": 10, "october": 10,
+    "nov": 11, "november": 11,
+    "des": 12, "desember": 12, "dec": 12, "december": 12,
+}
+MONTH_PATTERN = "|".join(sorted(MONTH_NAMES, key=len, reverse=True))
+DATE_RANGE_PATTERN = re.compile(
+    rf"(?<!\d)(?P<start_day>\d{{1,2}})\s*(?:-|–|—|s\.?d\.?|sampai|hingga|to)\s*"
+    rf"(?P<end_day>\d{{1,2}})\s+(?P<month>{MONTH_PATTERN})\.?"
+    rf"(?:\s+(?P<year>20\d{{2}}))?",
+    re.IGNORECASE,
+)
+DATE_PATTERN = re.compile(
+    rf"(?<!\d)(?P<day>\d{{1,2}})\s+(?P<month>{MONTH_PATTERN})\.?"
+    rf"(?:\s+(?P<year>20\d{{2}}))?",
+    re.IGNORECASE,
+)
+NUMERIC_DATE_PATTERN = re.compile(
+    r"(?<!\d)(?P<day>\d{1,2})[/-](?P<month>\d{1,2})[/-](?P<year>20\d{2})(?!\d)"
+)
+DATE_CONTEXT_PATTERN = re.compile(
+    r"\b(event|acara|bazaar|bazar|festival|expo|pameran|berlangsung|tanggal|date|held)\b",
+    re.IGNORECASE,
+)
+NON_EVENT_DATE_PATTERN = re.compile(
+    r"\b(deadline|closing|close|tutup|registrasi|pendaftaran|daftar|registration)\b",
+    re.IGNORECASE,
+)
+PRICE_PATTERN = re.compile(
+    r"(?<![\w])(?P<currency>rp\.?\s*)?(?P<amount>\d[\d.,]*"
+    r"(?:\s*(?:juta|jt|ribu|rb|million|k))?)(?![\w])",
+    re.IGNORECASE,
+)
+TENANT_PRICE_LABEL_PATTERN = re.compile(
+    r"\b(?:harga|biaya|tarif|sewa|investasi|price)\s*"
+    r"(?:(?:tenant|booth|stand|lapak)\s*)?"
+    r"(?:(?:mulai\s+dari|from)\s*)?[:=\-]?\s*"
+    r"(?:rp\.?\s*)?(?P<amount>\d[\d.,]*(?:\s*(?:juta|jt|ribu|rb|million|k))?)",
+    re.IGNORECASE,
+)
 
 
 class NoPublicPostsError(RuntimeError):
@@ -84,12 +134,125 @@ def contains_keywords(text):
 
 
 def parse_price(caption):
-    """Mencoba mengekstrak angka harga sewa."""
-    match = re.search(r"(?:rp|idr)\s*([\d.,]+)", caption.lower())
-    if match:
-        clean_price = re.sub(r"[^\d]", "", match.group(1))
-        return int(clean_price) if clean_price else None
+    """Extract an explicitly labeled tenant/booth fee, not an unrelated price."""
+    for match in TENANT_PRICE_LABEL_PATTERN.finditer(caption):
+        amount = parse_money_amount(match.group("amount"))
+        if amount is not None:
+            return amount
+
+    currency_amounts = [
+        parse_money_amount(match.group("amount"))
+        for match in PRICE_PATTERN.finditer(caption)
+        if match.group("currency") or re.search(r"(?:juta|jt|ribu|rb|million|k)$", match.group("amount"), re.I)
+    ]
+    currency_amounts = [amount for amount in currency_amounts if amount is not None]
+    if len(currency_amounts) == 1:
+        return currency_amounts[0]
+
     return None
+
+
+def parse_money_amount(value):
+    """Convert Indonesian currency formats such as 1.500.000 or 1,5 juta."""
+    normalized = value.strip().casefold()
+    suffix_match = re.search(r"\s*(juta|jt|ribu|rb|million|k)$", normalized)
+    multiplier = 1
+    if suffix_match:
+        suffix = suffix_match.group(1)
+        multiplier = 1_000_000 if suffix in {"juta", "jt", "million"} else 1_000
+        normalized = normalized[:suffix_match.start()].strip()
+
+    if "." in normalized and "," in normalized:
+        decimal_separator = "." if normalized.rfind(".") > normalized.rfind(",") else ","
+        grouping_separator = "," if decimal_separator == "." else "."
+        normalized = normalized.replace(grouping_separator, "")
+        normalized = normalized.replace(decimal_separator, ".")
+    elif suffix_match and ("," in normalized or "." in normalized):
+        normalized = normalized.replace(",", ".")
+    else:
+        normalized = re.sub(r"[.,](?=\d{3}(?:\D|$))", "", normalized)
+        normalized = normalized.replace(",", ".")
+
+    try:
+        amount = int(round(float(normalized) * multiplier))
+    except ValueError:
+        return None
+
+    return amount if amount > 0 else None
+
+
+def date_context(caption, start, end):
+    """Keep date hints local so a nearby registration deadline is not mistaken for event dates."""
+    boundaries = r"[\n.!?;|•]"
+    prior_boundaries = list(re.finditer(boundaries, caption[:start]))
+    next_boundary = re.search(boundaries, caption[end:])
+    context_start = prior_boundaries[-1].end() if prior_boundaries else 0
+    context_end = end + next_boundary.start() if next_boundary else len(caption)
+    return caption[context_start:context_end]
+
+
+def parse_event_dates(caption, posted_at=None):
+    """Return explicit event dates from a caption; infer a missing year from its post date."""
+    anchor = posted_at or datetime.now(timezone.utc)
+    if isinstance(anchor, str):
+        anchor = datetime.fromisoformat(anchor.replace("Z", "+00:00"))
+    anchor_date = anchor.date()
+
+    candidates = []
+    occupied_ranges = []
+    for match in DATE_RANGE_PATTERN.finditer(caption):
+        context = date_context(caption, match.start(), match.end())
+        if NON_EVENT_DATE_PATTERN.search(context) and not DATE_CONTEXT_PATTERN.search(context):
+            continue
+        candidates.append(match)
+        occupied_ranges.append(match.span())
+
+    for pattern in (NUMERIC_DATE_PATTERN, DATE_PATTERN):
+        for match in pattern.finditer(caption):
+            if any(start <= match.start() < end for start, end in occupied_ranges):
+                continue
+            context = date_context(caption, match.start(), match.end())
+            if not DATE_CONTEXT_PATTERN.search(context):
+                continue
+            if NON_EVENT_DATE_PATTERN.search(context) and not re.search(
+                r"\b(event|acara|bazaar|bazar|festival|expo|pameran)\b", context, re.IGNORECASE
+            ):
+                continue
+            candidates.append(match)
+
+    if not candidates:
+        return None, None
+
+    match = min(candidates, key=lambda candidate: candidate.start())
+    explicit_year = match.groupdict().get("year")
+    if isinstance(match, re.Match) and "start_day" in match.groupdict():
+        start_day = int(match.group("start_day"))
+        end_day = int(match.group("end_day"))
+        month = MONTH_NAMES[match.group("month").casefold().rstrip(".")]
+        year = int(explicit_year) if explicit_year else anchor.year
+        start_date = date(year, month, start_day)
+        if not explicit_year and start_date < anchor_date:
+            start_date = date(year + 1, month, start_day)
+        end_year = start_date.year
+        if end_day < start_day and month == 1:
+            end_year += 1
+        end_date = date(end_year, month, end_day)
+        if end_date < start_date:
+            end_date = date(start_date.year + 1, month, end_day)
+    else:
+        day = int(match.group("day"))
+        month_value = match.group("month")
+        if month_value.isdigit():
+            month = int(month_value)
+        else:
+            month = MONTH_NAMES[month_value.casefold().rstrip(".")]
+        year = int(explicit_year) if explicit_year else anchor.year
+        start_date = date(year, month, day)
+        if not explicit_year and start_date < anchor_date:
+            start_date = date(year + 1, month, day)
+        end_date = start_date
+
+    return start_date.isoformat(), end_date.isoformat()
 
 
 def parse_deadline(caption, now=None):
@@ -187,18 +350,21 @@ def get_post_details(page):
 
 
 def send_match(account_name, post_url, caption, posted_at):
+    start_date, end_date = parse_event_dates(caption, posted_at)
     payload = {
         "title": f"Event Tenant Call - @{account_name}",
         "description": caption,
         "location_name": "Jakarta / Depok (Perlu Validasi)",
         "latitude": -6.2,
         "longitude": 106.816666,
-        "price": parse_price(caption),
+        "tenant_price": parse_price(caption),
         "instagram_post_url": post_url,
         "registration_link": f"https://instagram.com/{account_name}",
         "account_name": account_name,
         "posted_at": posted_at.isoformat(),
         "deadline_date": parse_deadline(caption),
+        "start_date": start_date,
+        "end_date": end_date,
     }
     headers = {
         "Authorization": f"Bearer {API_TOKEN}",
@@ -243,7 +409,7 @@ def process_account(profile_page, post_page, account_name, cutoff, known_posts=N
 
         for post_url in new_urls:
             shortcode = post_shortcode(post_url)
-            if shortcode in known_posts:
+            if shortcode in known_posts and not REFRESH_EXISTING:
                 if saw_recent_post:
                     print(f"  [✓] Delta selesai: postingan lama @{account_name} ditemukan.")
                     found_delta_boundary = True

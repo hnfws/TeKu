@@ -31,13 +31,9 @@ class ProcessScrapedEvent implements ShouldBeUnique, ShouldQueue
         return $this->payload['instagram_post_url'];
     }
 
-    public function handle(): void
+    public function handle(): string
     {
-        DB::transaction(function () {
-            if (Tenant::where('instagram_post_url', $this->payload['instagram_post_url'])->exists()) {
-                return;
-            }
-
+        return DB::transaction(function (): string {
             $accountName = strtolower($this->payload['account_name']);
             $caption = mb_strtolower($this->payload['description'] ?? '');
             $priorityKeywords = config('services.scraper.priority_keywords', []);
@@ -48,18 +44,29 @@ class ProcessScrapedEvent implements ShouldBeUnique, ShouldQueue
             $accountPriority = in_array($accountName, $priorityAccounts, true);
             $priorityScore = ($keywordPriority ? 50 : 0) + ($accountPriority ? 50 : 0);
             $isPriority = $priorityScore > 0;
+            $tenant = Tenant::query()
+                ->where('instagram_post_url', $this->payload['instagram_post_url'])
+                ->first();
+            $isUpdate = $tenant !== null;
+            $event = $tenant?->event()->lockForUpdate()->first() ?? new Event;
 
-            $event = Event::create([
+            $event->fill([
                 'title' => $this->payload['title'],
                 'category' => 'bazaar',
-                'location_name' => $this->payload['location_name'] ?? 'Lokasi Perlu Validasi',
-                'start_date' => $this->eventDate($this->payload['start_date'] ?? null),
-                'end_date' => $this->eventDate($this->payload['end_date'] ?? null),
+                'location_name' => $this->payload['location_name'] ?? $event->location_name ?? 'Lokasi Perlu Validasi',
+                'start_date' => isset($this->payload['start_date'])
+                    ? $this->eventDate($this->payload['start_date'])
+                    : $event->start_date,
+                'end_date' => isset($this->payload['end_date'])
+                    ? $this->eventDate($this->payload['end_date'])
+                    : $event->end_date,
                 'latitude' => $this->payload['latitude'],
                 'longitude' => $this->payload['longitude'],
-                'source_url' => $this->payload['registration_link'] ?? null,
-                'description' => $this->payload['description'] ?? null,
-                'price' => $this->payload['price'] ?? null,
+                'source_url' => $this->payload['registration_link'] ?? $event->source_url,
+                'description' => $this->payload['description'] ?? $event->description,
+                'price' => array_key_exists('price', $this->payload)
+                    ? $this->payload['price']
+                    : $event->price,
                 'organizer_name' => $accountName,
                 'source_account' => $accountName,
                 'priority_score' => $priorityScore,
@@ -67,6 +74,7 @@ class ProcessScrapedEvent implements ShouldBeUnique, ShouldQueue
                     ? ($isPriority ? 'true' : 'false')
                     : $isPriority,
             ]);
+            $event->save();
 
             if (DB::getDriverName() === 'pgsql') {
                 DB::statement(
@@ -75,17 +83,23 @@ class ProcessScrapedEvent implements ShouldBeUnique, ShouldQueue
                 );
             }
 
-            Tenant::create([
+            $tenant ??= new Tenant;
+            $tenant->fill([
                 'event_id' => $event->id,
                 'tenant_type' => 'curated_call',
-                'price' => $this->payload['price'] ?? null,
+                'price' => array_key_exists('tenant_price', $this->payload)
+                    ? ($this->payload['tenant_price'] ?? $tenant->price)
+                    : ($this->payload['price'] ?? $tenant->price),
                 'requirements' => $this->payload['description'] ?? null,
-                'registration_link' => $this->payload['registration_link'] ?? null,
+                'registration_link' => $this->payload['registration_link'] ?? $tenant->registration_link,
                 'instagram_post_url' => $this->payload['instagram_post_url'],
                 'deadline_date' => isset($this->payload['deadline_date'])
                     ? Carbon::parse($this->payload['deadline_date'])
-                    : null,
+                    : $tenant->deadline_date,
             ]);
+            $tenant->save();
+
+            return $isUpdate ? 'updated' : 'created';
         });
     }
 

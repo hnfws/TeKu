@@ -19,6 +19,7 @@ class ScraperController extends Controller
             'latitude' => 'required|numeric',
             'longitude' => 'required|numeric',
             'price' => 'nullable|numeric',
+            'tenant_price' => 'nullable|numeric|min:0',
             'instagram_post_url' => 'required|url',
             'registration_link' => 'nullable|url',
             'account_name' => ['required', 'string', 'max:100', 'regex:/^[a-zA-Z0-9._]+$/'],
@@ -35,11 +36,15 @@ class ScraperController extends Controller
             ], 422);
         }
 
-        ProcessScrapedEvent::dispatchSync($validator->validated());
+        $result = ProcessScrapedEvent::dispatchSync($validator->validated());
 
         return response()->json([
-            'status' => 'processed',
-            'message' => 'Event selesai diproses.',
+            'status' => $result ?? 'processed',
+            'message' => match ($result) {
+                'created' => 'Event baru berhasil disimpan.',
+                'updated' => 'Data event berhasil diperbarui.',
+                default => 'Event selesai diproses.',
+            },
         ], 200);
     }
 
