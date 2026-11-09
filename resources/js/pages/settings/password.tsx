@@ -80,7 +80,7 @@ export default function Password() {
                             <Button
                                 type="button"
                                 variant="outline"
-                                className="w-fit"
+                                className="w-fit border-stone-300 bg-white text-stone-900 hover:bg-stone-50 hover:text-stone-900"
                                 onClick={() => {
                                     emailForm.setData({ email: auth.user.email, current_password: '' });
                                     setEmailFormOpen((open) => !open);
@@ -134,7 +134,7 @@ export default function Password() {
                             <Button
                                 type="button"
                                 variant="outline"
-                                className="w-fit"
+                                className="w-fit border-stone-300 bg-white text-stone-900 hover:bg-stone-50 hover:text-stone-900"
                                 onClick={() => {
                                     phoneForm.setData({ phone: auth.user.phone ?? '', current_password: '' });
                                     setPhoneFormOpen((open) => !open);

@@ -34,8 +34,8 @@ export default function DeleteUser() {
     return (
         <div className="space-y-6">
             <HeadingSmall title="Delete account" description="Delete your account and all of its resources" />
-            <div className="space-y-4 rounded-lg border border-red-100 bg-red-50 p-4 dark:border-red-200/10 dark:bg-red-700/10">
-                <div className="relative space-y-0.5 text-red-600 dark:text-red-100">
+            <div className="space-y-4 rounded-lg border border-red-100 bg-red-50 p-4">
+                <div className="relative space-y-0.5 text-red-600">
                     <p className="font-medium">Warning</p>
                     <p className="text-sm">Please proceed with caution, this cannot be undone.</p>
                 </div>
@@ -44,7 +44,7 @@ export default function DeleteUser() {
                     <DialogTrigger asChild>
                         <Button variant="destructive">Delete account</Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="bg-white text-stone-900">
                         <DialogTitle>Are you sure you want to delete your account?</DialogTitle>
                         <DialogDescription>
                             Once your account is deleted, all of its resources and data will also be permanently deleted. Please enter your password
@@ -65,6 +65,7 @@ export default function DeleteUser() {
                                     onChange={(e) => setData('password', e.target.value)}
                                     placeholder="Password"
                                     autoComplete="current-password"
+                                    className="border-stone-300 bg-white text-stone-900 placeholder:text-stone-500"
                                 />
 
                                 <InputError message={errors.password} />
@@ -72,12 +73,16 @@ export default function DeleteUser() {
 
                             <DialogFooter>
                                 <DialogClose asChild>
-                                    <Button variant="secondary" onClick={closeModal}>
+                                    <Button
+                                        className="border border-stone-300 bg-white text-stone-900 hover:bg-stone-50"
+                                        variant="secondary"
+                                        onClick={closeModal}
+                                    >
                                         Cancel
                                     </Button>
                                 </DialogClose>
 
-                                <Button variant="destructive" disabled={processing} asChild>
+                                <Button className="bg-red-600 text-white hover:bg-red-700" variant="destructive" disabled={processing} asChild>
                                     <button type="submit">Delete account</button>
                                 </Button>
                             </DialogFooter>
