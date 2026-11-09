@@ -14,7 +14,7 @@ it('rejects requests with an invalid scraper token', function () {
     config(['services.scraper.token' => 'expected-token']);
 
     $this->postJson('/api/scraped-events', [], [
-        'Authorization' => 'Bearer incorrect-token',
+        'Authorization' => 'Bearer invalid-token',
     ])->assertUnauthorized();
 });
 
@@ -80,7 +80,7 @@ it('scores priority events and stores recognized deadlines', function () {
     });
 
     try {
-        $job = new ProcessScrapedEvent([
+        (new ProcessScrapedEvent([
             'title' => 'Event Tenant Call',
             'description' => 'Limited slot at ICE BSD',
             'location_name' => 'Jakarta',
@@ -93,8 +93,7 @@ it('scores priority events and stores recognized deadlines', function () {
             'end_date' => now()->addDays(7)->addHours(4)->toISOString(),
             'price' => 50000,
             'tenant_price' => 1500000,
-        ]);
-        $job->handle();
+        ]))->handle();
         (new ProcessScrapedEvent([
             'title' => 'Updated Tenant Call',
             'description' => 'Limited slot at ICE BSD, updated booth details.',

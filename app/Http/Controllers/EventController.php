@@ -52,11 +52,15 @@ class EventController extends Controller
 
     public function index(Request $request): Response
     {
+        $now = now();
         $events = Event::query()
-            ->with(['tenants:id,event_id,price,tenant_type'])
+            ->with(['tenants:id,event_id,price,tenant_type,deadline_date'])
             ->when($request->filled('search'), fn ($query) => $query->where('title', 'like', '%'.$request->string('search')->toString().'%'))
             ->when($request->filled('category'), fn ($query) => $query->where('category', $request->query('category')))
-            ->orderBy('start_date')
+            ->orderByRaw('CASE WHEN start_date IS NULL THEN 2 WHEN start_date >= ? THEN 0 ELSE 1 END', [$now])
+            ->orderByRaw('CASE WHEN start_date >= ? THEN start_date END ASC', [$now])
+            ->orderByRaw('CASE WHEN start_date < ? THEN start_date END DESC', [$now])
+            ->orderByDesc('id')
             ->paginate(6)
             ->withQueryString();
 
@@ -74,6 +78,7 @@ class EventController extends Controller
     public function dashboard(Request $request): Response
     {
         $userId = $request->user()->id;
+        $now = now();
 
         return Inertia::render('events/dashboard', [
             'registeredEvents' => EventRegistration::query()
@@ -94,12 +99,15 @@ class EventController extends Controller
                 ->map(fn (Event $event) => [
                     'id' => $event->id,
                     'title' => $event->title,
-                    'start_date' => \Illuminate\Support\Carbon::parse($event->start_date)->toDateString(),
+                    'start_date' => Carbon::parse($event->start_date)->toDateString(),
                 ])
                 ->values(),
             'events' => Event::query()
                 ->when($request->filled('category'), fn ($query) => $query->where('category', $request->query('category')))
-                ->orderBy('start_date')
+                ->orderByRaw('CASE WHEN start_date IS NULL THEN 2 WHEN start_date >= ? THEN 0 ELSE 1 END', [$now])
+                ->orderByRaw('CASE WHEN start_date >= ? THEN start_date END ASC', [$now])
+                ->orderByRaw('CASE WHEN start_date < ? THEN start_date END DESC', [$now])
+                ->orderByDesc('id')
                 ->paginate(8)
                 ->withQueryString(),
             'filters' => $request->only(['category']),
@@ -117,16 +125,44 @@ class EventController extends Controller
                 ->where('user_id', $request->user()->id)
                 ->where('status', 'registered')
                 ->exists(),
+            'registrationClosed' => $event->tenants()
+                ->whereNotNull('deadline_date')
+                ->whereDate('deadline_date', '<', now()->toDateString())
+                ->exists(),
         ]);
     }
 
     public function register(Request $request, Event $event): RedirectResponse
     {
-        EventRegistration::updateOrCreate(
-            ['event_id' => $event->id, 'user_id' => $request->user()->id],
-            ['status' => 'registered', 'registered_at' => now()]
-        );
+        if ($event->tenants()
+            ->whereNotNull('deadline_date')
+            ->whereDate('deadline_date', '<', now()->toDateString())
+            ->exists()) {
+            return back()->with('error', 'Pendaftaran tenant sudah ditutup karena melewati batas waktu.');
+        }
+
+        $registration = EventRegistration::firstOrNew([
+            'event_id' => $event->id,
+            'user_id' => $request->user()->id,
+        ]);
+        $registration->forceFill([
+            'status' => 'registered',
+            'registered_at' => now(),
+            'email_reminded_at' => null,
+            'browser_reminded_at' => null,
+        ])->save();
 
         return back()->with('success', 'Pendaftaran event berhasil disimpan.');
+    }
+
+    public function cancelRegistration(Request $request, Event $event): RedirectResponse
+    {
+        EventRegistration::query()
+            ->where('event_id', $event->id)
+            ->where('user_id', $request->user()->id)
+            ->where('status', 'registered')
+            ->update(['status' => 'cancelled']);
+
+        return back()->with('success', 'Pendaftaran event berhasil dibatalkan.');
     }
 }

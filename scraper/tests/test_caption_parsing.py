@@ -1,11 +1,16 @@
+import base64
+from io import BytesIO
 import sys
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
+
+from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from igscrap import parse_event_dates, parse_price
+from igscrap import compress_post_image, parse_event_dates, parse_price
 
 
 class CaptionParsingTest(unittest.TestCase):
@@ -58,6 +63,24 @@ class CaptionParsingTest(unittest.TestCase):
             (None, None),
         )
         self.assertIsNone(parse_price("Hadiah Rp500.000 dan uang muka Rp1.000.000"))
+
+    def test_compresses_instagram_images_before_upload(self):
+        source = BytesIO()
+        Image.new("RGB", (1600, 1200), "green").save(source, format="JPEG")
+
+        class FakeResponse:
+            content = source.getvalue()
+
+            def raise_for_status(self):
+                return None
+
+        with patch("igscrap.requests.get", return_value=FakeResponse()):
+            encoded = compress_post_image("https://cdn.example/image.jpg", "https://instagram.com/p/post/")
+
+        image_bytes = base64.b64decode(encoded)
+        with Image.open(BytesIO(image_bytes)) as compressed:
+            self.assertLessEqual(max(compressed.size), 1024)
+        self.assertLessEqual(len(image_bytes), 240_000)
 
 
 if __name__ == "__main__":

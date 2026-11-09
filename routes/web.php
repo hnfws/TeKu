@@ -27,6 +27,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('event-dashboard', [EventController::class, 'dashboard'])->name('events.dashboard');
     Route::get('events/{event}', [EventController::class, 'show'])->whereNumber('event')->name('events.show');
     Route::post('events/{event}/register', [EventController::class, 'register'])->whereNumber('event')->name('events.register');
+    Route::delete('events/{event}/register', [EventController::class, 'cancelRegistration'])->whereNumber('event')->name('events.register.cancel');
 
     Route::get('inventory', [InventoryController::class, 'index'])->name('inventory.index');
     Route::get('inventory/create', [InventoryController::class, 'create'])->name('inventory.create');

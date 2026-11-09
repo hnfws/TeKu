@@ -12,7 +12,7 @@ type EventItem = {
     organizer_name: string | null;
     source_account: string | null;
     price: number | string | null;
-    tenants: { id: number; price: number | string | null; tenant_type: string }[];
+    tenants: { id: number; price: number | string | null; tenant_type: string; deadline_date: string | null }[];
 };
 
 interface EventsIndexProps {
@@ -30,6 +30,7 @@ interface EventsIndexProps {
 
 const dateLabel = (value: string | null) =>
     value ? new Date(value).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : 'Jadwal belum tersedia';
+const deadlineLabel = (value: string) => new Date(value).toLocaleDateString('id-ID', { dateStyle: 'medium' });
 const priceLabel = (price: string | number | null) =>
     price === null
         ? 'Gratis'
@@ -106,6 +107,7 @@ export default function EventsIndex({ events, filters, registeredEventIds, categ
                         {events.data.map((event) => {
                             const registered = registeredEventIds.includes(event.id);
                             const tenantPrice = event.tenants.find((tenant) => tenant.price !== null)?.price ?? null;
+                            const tenantDeadline = event.tenants.find((tenant) => tenant.deadline_date)?.deadline_date;
                             const isTenantOpportunity = Boolean(event.source_account);
                             const displayedPrice = tenantPrice ?? event.price;
                             return (
@@ -133,6 +135,12 @@ export default function EventsIndex({ events, filters, registeredEventIds, categ
                                                 <i className="fa-solid fa-location-dot mr-2 text-stone-400" />
                                                 {event.location_name || 'Lokasi belum tersedia'}
                                             </p>
+                                            {tenantDeadline && (
+                                                <p className="text-[11px] text-stone-500">
+                                                    <i className="fa-regular fa-clock mr-2 text-stone-400" />
+                                                    Batas daftar tenant: {deadlineLabel(tenantDeadline)}
+                                                </p>
+                                            )}
                                             <p className="text-[11px] text-stone-400">
                                                 Oleh {event.organizer_name || 'Penyelenggara event'}
                                                 {event.category ? ` · ${event.category}` : ''}

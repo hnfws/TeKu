@@ -1,13 +1,14 @@
 <?php
 
+use App\Mail\EventReminderMail;
 use App\Models\Event;
 use App\Models\EventRegistration;
 use App\Models\InventoryMovement;
 use App\Models\InventoryProduct;
+use App\Models\Tenant;
 use App\Models\User;
-use App\Mail\EventReminderMail;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 
 test('users can create inventory and the initial stock is recorded', function () {
@@ -162,6 +163,124 @@ test('users can register for an event only once', function () {
         ->where('calendarEvents.0.id', $event->id));
 });
 
+test('users cannot register for tenant opportunities after the deadline', function () {
+    $user = User::factory()->create();
+    $event = Event::create([
+        'title' => 'Tenant Bazaar',
+        'category' => 'bazaar',
+        'location_name' => 'Jakarta',
+        'start_date' => now()->addDays(10),
+        'end_date' => now()->addDays(10)->addHours(4),
+        'latitude' => -6.2,
+        'longitude' => 106.8,
+        'source_account' => 'info.tenant',
+    ]);
+    Tenant::create([
+        'event_id' => $event->id,
+        'tenant_type' => 'curated_call',
+        'deadline_date' => now()->subDay(),
+    ]);
+
+    $this->actingAs($user)
+        ->from("/events/{$event->id}")
+        ->post("/events/{$event->id}/register")
+        ->assertRedirect("/events/{$event->id}")
+        ->assertSessionHas('error');
+
+    expect(EventRegistration::query()
+        ->where('user_id', $user->id)
+        ->where('event_id', $event->id)
+        ->exists())->toBeFalse();
+
+    $this->get("/events/{$event->id}")->assertInertia(fn ($page) => $page
+        ->where('registrationClosed', true)
+        ->where('isRegistered', false));
+});
+
+test('users can cancel an event registration', function () {
+    $user = User::factory()->create();
+    $event = Event::create([
+        'title' => 'Festival Musik',
+        'category' => 'music',
+        'location_name' => 'Jakarta',
+        'start_date' => now()->addDays(10),
+        'end_date' => now()->addDays(10)->addHours(3),
+        'latitude' => -6.2,
+        'longitude' => 106.8,
+    ]);
+    EventRegistration::create([
+        'event_id' => $event->id,
+        'user_id' => $user->id,
+        'status' => 'registered',
+        'registered_at' => now(),
+    ]);
+
+    $this->actingAs($user)
+        ->from("/events/{$event->id}")
+        ->delete("/events/{$event->id}/register")
+        ->assertRedirect("/events/{$event->id}");
+
+    $this->assertDatabaseHas('event_registrations', [
+        'event_id' => $event->id,
+        'user_id' => $user->id,
+        'status' => 'cancelled',
+    ]);
+});
+
+test('event lists show nearest upcoming dates before later ones', function () {
+    $user = User::factory()->create();
+    $laterEvent = Event::create([
+        'title' => 'Tenant 5 November',
+        'category' => 'bazaar',
+        'location_name' => 'Jakarta',
+        'start_date' => now()->startOfDay()->addDays(8),
+        'end_date' => now()->startOfDay()->addDays(8)->addHours(4),
+        'latitude' => -6.2,
+        'longitude' => 106.8,
+    ]);
+    $nearestEvent = Event::create([
+        'title' => 'Tenant 28 January',
+        'category' => 'bazaar',
+        'location_name' => 'Jakarta',
+        'start_date' => now()->startOfDay()->addDay(),
+        'end_date' => now()->startOfDay()->addDay()->addHours(4),
+        'latitude' => -6.2,
+        'longitude' => 106.8,
+    ]);
+
+    $this->actingAs($user)->get('/events')->assertInertia(fn ($page) => $page
+        ->where('events.data.0.id', $nearestEvent->id)
+        ->where('events.data.1.id', $laterEvent->id));
+
+    $this->get('/event-dashboard')->assertInertia(fn ($page) => $page
+        ->where('events.data.0.id', $nearestEvent->id)
+        ->where('events.data.1.id', $laterEvent->id));
+});
+
+test('dashboard shows upcoming schedules for registered events', function () {
+    $user = User::factory()->create();
+    $event = Event::create([
+        'title' => 'Bazaar Akhir Pekan',
+        'category' => 'bazaar',
+        'location_name' => 'Jakarta',
+        'start_date' => now()->addDays(2)->setTime(18, 30),
+        'end_date' => now()->addDays(2)->setTime(21, 0),
+        'latitude' => -6.2,
+        'longitude' => 106.8,
+    ]);
+    EventRegistration::create([
+        'event_id' => $event->id,
+        'user_id' => $user->id,
+        'status' => 'registered',
+        'registered_at' => now(),
+    ]);
+
+    $this->actingAs($user)->get('/dashboard')->assertInertia(fn ($page) => $page
+        ->has('upcomingEventReminders', 1)
+        ->where('upcomingEventReminders.0.title', $event->title)
+        ->where('upcomingEventReminders.0.location_name', 'Jakarta'));
+});
+
 test('calendar shows dated events for the requested month and marks registrations', function () {
     $user = User::factory()->create();
     $month = now()->addMonth()->startOfMonth();
@@ -184,11 +303,11 @@ test('calendar shows dated events for the requested month and marks registration
     $response = $this->actingAs($user)
         ->get('/calendar?month='.$month->format('Y-m'));
     $response->assertOk()->assertInertia(fn ($page) => $page
-            ->component('events/calendar')
-            ->where('month', $month->format('Y-m'))
-            ->has('events', 1)
-            ->where('events.0.id', $event->id)
-            ->where('events.0.is_registered', true));
+        ->component('events/calendar')
+        ->where('month', $month->format('Y-m'))
+        ->has('events', 1)
+        ->where('events.0.id', $event->id)
+        ->where('events.0.is_registered', true));
 });
 
 test('push subscriptions are scoped to their owner', function () {

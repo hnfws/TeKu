@@ -30,6 +30,7 @@ type EventItem = {
 interface EventShowProps {
     event: EventItem;
     isRegistered: boolean;
+    registrationClosed: boolean;
 }
 
 const dateLabel = (value: string | null) =>
@@ -39,9 +40,9 @@ const money = (value: number | string | null) =>
         ? 'Gratis'
         : new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value));
 
-export default function EventShow({ event, isRegistered }: EventShowProps) {
+export default function EventShow({ event, isRegistered, registrationClosed }: EventShowProps) {
     const form = useForm({});
-    const flash = usePage<{ flash?: { success?: string } }>().props.flash;
+    const flash = usePage<{ flash?: { success?: string; error?: string } }>().props.flash;
     const coordinates = event.latitude && event.longitude ? `${event.latitude},${event.longitude}` : null;
     const tenantPrice = event.tenants?.find((tenant) => tenant.price !== null)?.price ?? null;
     const isTenantOpportunity = Boolean(event.source_account);
@@ -62,6 +63,11 @@ export default function EventShow({ event, isRegistered }: EventShowProps) {
                 {flash?.success && (
                     <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status">
                         {flash.success}
+                    </div>
+                )}
+                {flash?.error && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
+                        {flash.error}
                     </div>
                 )}
                 <div className="overflow-hidden rounded-2xl border border-stone-100 bg-white shadow-sm">
@@ -151,10 +157,30 @@ export default function EventShow({ event, isRegistered }: EventShowProps) {
                                     {event.start_date ? dateLabel(event.start_date) : 'Jadwal belum diumumkan'}
                                 </p>
                                 {isRegistered ? (
-                                    <div className="mt-5 rounded-lg bg-white/15 px-4 py-3 text-center text-sm font-semibold">
-                                        <i className="fa-solid fa-circle-check mr-2" />
-                                        Anda sudah terdaftar
-                                    </div>
+                                    <form
+                                        className="mt-5"
+                                        onSubmit={(submitEvent) => {
+                                            submitEvent.preventDefault();
+                                            form.delete(`/events/${event.id}/register`);
+                                        }}
+                                    >
+                                        <p className="rounded-lg bg-white/15 px-4 py-3 text-center text-sm font-semibold">
+                                            <i className="fa-solid fa-circle-check mr-2" />
+                                            Anda sudah terdaftar
+                                        </p>
+                                        <button
+                                            className="mt-3 w-full rounded-full border border-white/70 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-60"
+                                            disabled={form.processing}
+                                            type="submit"
+                                        >
+                                            {form.processing ? 'Membatalkan...' : 'Batalkan pendaftaran'}
+                                        </button>
+                                    </form>
+                                ) : registrationClosed ? (
+                                    <p className="mt-5 rounded-lg bg-white/15 px-4 py-3 text-center text-sm font-semibold">
+                                        <i className="fa-solid fa-clock mr-2" />
+                                        Pendaftaran tenant sudah ditutup
+                                    </p>
                                 ) : (
                                     <form
                                         className="mt-5"

@@ -1,3 +1,5 @@
+import base64
+from io import BytesIO
 import os
 import re
 import time
@@ -8,6 +10,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import requests
 from dotenv import load_dotenv
+from PIL import Image, ImageOps, UnidentifiedImageError
 from playwright.sync_api import sync_playwright
 
 load_dotenv(dotenv_path=Path(__file__).with_name(".env"))
@@ -329,6 +332,33 @@ def get_post_urls(page, account_name):
     return list(dict.fromkeys(post_urls))
 
 
+def compress_post_image(image_url, post_url):
+    response = requests.get(
+        image_url,
+        headers={
+            "User-Agent": "Mozilla/5.0 (compatible; TeKuInstagramScraper/1.0)",
+            "Referer": post_url,
+        },
+        timeout=20,
+    )
+    response.raise_for_status()
+
+    with Image.open(BytesIO(response.content)) as source:
+        image = ImageOps.exif_transpose(source).convert("RGB")
+
+    for dimensions in (1024, 800, 640, 480):
+        resized = image.copy()
+        resized.thumbnail((dimensions, dimensions))
+        for quality in (75, 65, 55):
+            output = BytesIO()
+            resized.save(output, format="JPEG", quality=quality, optimize=True)
+            image_bytes = output.getvalue()
+            if len(image_bytes) <= 240_000:
+                return base64.b64encode(image_bytes).decode("ascii")
+
+    raise RuntimeError("Gambar postingan Instagram tidak dapat dikompres hingga batas ukuran.")
+
+
 def get_post_details(page):
     if "/accounts/login" in page.url or "/challenge/" in page.url:
         raise RuntimeError("Instagram mengalihkan postingan ke halaman login atau challenge.")
@@ -339,18 +369,29 @@ def get_post_details(page):
         raise RuntimeError(f"Tanggal postingan tidak ditemukan: {page.url}")
 
     posted_at = datetime.fromtimestamp(int(timestamp_match.group(1)), tz=timezone.utc)
+    image_url = page.locator('meta[property="og:image"]').get_attribute("content")
+
     for selector in ('meta[property="og:description"]', 'meta[name="description"]'):
         description = page.locator(selector).get_attribute("content")
         if description:
-            return posted_at, description.strip()
+            return posted_at, description.strip(), image_url
 
     articles = page.locator("article").all_text_contents()
     caption = " ".join(text.strip() for text in articles if text.strip())
-    return posted_at, caption
+    return posted_at, caption, image_url
 
 
-def send_match(account_name, post_url, caption, posted_at):
+def send_match(account_name, post_url, caption, posted_at, image_url=None):
     start_date, end_date = parse_event_dates(caption, posted_at)
+    image_base64 = None
+    if image_url:
+        try:
+            image_base64 = compress_post_image(image_url, post_url)
+        except (requests.RequestException, OSError, UnidentifiedImageError, RuntimeError) as error:
+            print(f"  [!] Gambar postingan tidak dapat diambil/dikompres: {error}")
+    else:
+        print("  [!] Postingan tidak menyediakan URL gambar og:image.")
+
     payload = {
         "title": f"Event Tenant Call - @{account_name}",
         "description": caption,
@@ -358,6 +399,7 @@ def send_match(account_name, post_url, caption, posted_at):
         "latitude": -6.2,
         "longitude": 106.816666,
         "tenant_price": parse_price(caption),
+        "image_base64": image_base64,
         "instagram_post_url": post_url,
         "registration_link": f"https://instagram.com/{account_name}",
         "account_name": account_name,
@@ -419,7 +461,7 @@ def process_account(profile_page, post_page, account_name, cutoff, known_posts=N
                 continue
 
             post_page.goto(post_url, wait_until="domcontentloaded", timeout=8000)
-            posted_at, caption = get_post_details(post_page)
+            posted_at, caption, image_url = get_post_details(post_page)
             newly_seen_posts.append({
                 "shortcode": shortcode,
                 "posted_at": posted_at.isoformat(),
@@ -441,7 +483,7 @@ def process_account(profile_page, post_page, account_name, cutoff, known_posts=N
 
             if contains_keywords(caption):
                 print(f"  [🔥] MATCH FOUND! @{account_name}: {post_url}")
-                send_match(account_name, post_url, caption, posted_at)
+                send_match(account_name, post_url, caption, posted_at, image_url)
             else:
                 print(f"  [-] Postingan tidak cocok: {post_url} ({posted_at.date()})")
 

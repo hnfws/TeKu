@@ -20,6 +20,7 @@ class ScraperController extends Controller
             'longitude' => 'required|numeric',
             'price' => 'nullable|numeric',
             'tenant_price' => 'nullable|numeric|min:0',
+            'image_base64' => 'nullable|string|max:400000',
             'instagram_post_url' => 'required|url',
             'registration_link' => 'nullable|url',
             'account_name' => ['required', 'string', 'max:100', 'regex:/^[a-zA-Z0-9._]+$/'],

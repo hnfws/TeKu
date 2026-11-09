@@ -7,6 +7,7 @@ use App\Models\EventRegistration;
 use App\Models\InventoryProduct;
 use App\Models\Sale;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -46,7 +47,23 @@ class DashboardController extends Controller
                 ->map(fn (Event $event) => [
                     'id' => $event->id,
                     'title' => $event->title,
-                    'start_date' => \Illuminate\Support\Carbon::parse($event->start_date)->toDateString(),
+                    'start_date' => Carbon::parse($event->start_date)->toDateString(),
+                ])
+                ->values(),
+            'upcomingEventReminders' => Event::query()
+                ->whereHas('registrations', fn ($query) => $query
+                    ->where('user_id', $userId)
+                    ->where('status', 'registered'))
+                ->whereNotNull('start_date')
+                ->where('start_date', '>=', now())
+                ->orderBy('start_date')
+                ->limit(5)
+                ->get(['id', 'title', 'location_name', 'start_date'])
+                ->map(fn (Event $event) => [
+                    'id' => $event->id,
+                    'title' => $event->title,
+                    'location_name' => $event->location_name,
+                    'start_date' => Carbon::parse($event->start_date)->toIso8601String(),
                 ])
                 ->values(),
             'products' => InventoryProduct::query()

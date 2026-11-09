@@ -12,6 +12,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class ProcessScrapedEvent implements ShouldBeUnique, ShouldQueue
 {
@@ -74,6 +75,24 @@ class ProcessScrapedEvent implements ShouldBeUnique, ShouldQueue
                     ? ($isPriority ? 'true' : 'false')
                     : $isPriority,
             ]);
+            if (isset($this->payload['image_base64'])) {
+                $imageBytes = base64_decode($this->payload['image_base64'], true);
+                $imageInfo = $imageBytes === false ? false : @getimagesizefromstring($imageBytes);
+                if ($imageBytes === false
+                    || $imageInfo === false
+                    || $imageInfo['mime'] !== 'image/jpeg'
+                    || $imageInfo[0] > 1024
+                    || $imageInfo[1] > 1024) {
+                    throw new \RuntimeException('Gambar Instagram tidak valid atau bukan JPEG.');
+                }
+
+                $imagePath = 'instagram-events/'.hash('sha256', $this->payload['instagram_post_url']).'.jpg';
+                if (! Storage::disk('public')->put($imagePath, $imageBytes)) {
+                    throw new \RuntimeException('Gambar Instagram gagal disimpan ke storage publik.');
+                }
+
+                $event->image_url = Storage::disk('public')->url($imagePath);
+            }
             $event->save();
 
             if (DB::getDriverName() === 'pgsql') {
