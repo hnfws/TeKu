@@ -377,6 +377,13 @@ test('Inertia payment requests are redirected to the Midtrans sandbox checkout',
     $gateway->shouldReceive('createRedirectUrl')
         ->once()
         ->andReturn($checkoutUrl);
+    $gateway->shouldReceive('transactionStatus')
+        ->once()
+        ->andReturnUsing(fn (string $orderId) => (object) [
+            'order_id' => $orderId,
+            'gross_amount' => '1000.00',
+            'transaction_status' => 'pending',
+        ]);
     app()->instance(MidtransSandboxGateway::class, $gateway);
 
     $this->actingAs($user)
@@ -394,6 +401,64 @@ test('Inertia payment requests are redirected to the Midtrans sandbox checkout',
     expect(session()->get("tekumodal.payment_animation.{$payment->id}"))->toBeTrue();
     expect(LoanPayment::query()->count())->toBe(1)
         ->and($payment->redirect_url)->toBe($checkoutUrl);
+});
+
+test('continuing an expired checkout creates a fresh Midtrans transaction', function () {
+    $user = User::factory()->create();
+    $account = BankAccount::create([
+        'user_id' => $user->id,
+        'account_holder' => 'Test User',
+        'account_number' => '123456789',
+        'bank_name' => 'BCA',
+    ]);
+    $loan = LoanApplication::create([
+        'user_id' => $user->id,
+        'bank_account_id' => $account->id,
+        'principal' => 500_000,
+        'term_months' => 3,
+        'monthly_interest_rate' => 2,
+        'total_interest' => 30_000,
+        'total_repayment' => 530_000,
+        'status' => 'simulation_active',
+    ]);
+    $installment = LoanInstallment::create([
+        'loan_application_id' => $loan->id,
+        'installment_number' => 1,
+        'due_date' => now()->addMonthNoOverflow()->toDateString(),
+        'amount' => 1_000,
+    ]);
+    $expiredPayment = $installment->payments()->create([
+        'order_id' => 'expired-order',
+        'payment_method' => 'qris',
+        'amount' => $installment->amount,
+        'redirect_url' => 'https://app.sandbox.midtrans.com/snap/v4/redirection/expired-token',
+        'status' => 'pending',
+    ]);
+    $checkoutUrl = 'https://app.sandbox.midtrans.com/snap/v4/redirection/fresh-token';
+    $gateway = Mockery::mock(MidtransSandboxGateway::class);
+    $gateway->shouldReceive('transactionStatus')
+        ->once()
+        ->with('expired-order')
+        ->andReturn((object) [
+            'order_id' => 'expired-order',
+            'gross_amount' => '1000.00',
+            'transaction_status' => 'expire',
+            'transaction_id' => 'provider-expired-id',
+        ]);
+    $gateway->shouldReceive('createRedirectUrl')
+        ->once()
+        ->andReturn($checkoutUrl);
+    app()->instance(MidtransSandboxGateway::class, $gateway);
+
+    $this->actingAs($user)
+        ->withHeader('X-Inertia', 'true')
+        ->post("/tekumodal/installments/{$installment->id}/payments", ['payment_method' => 'qris'])
+        ->assertStatus(409)
+        ->assertHeader('X-Inertia-Location', $checkoutUrl);
+
+    expect($expiredPayment->fresh()->status)->toBe('expire')
+        ->and(LoanPayment::query()->count())->toBe(2)
+        ->and(LoanPayment::query()->where('status', 'pending')->value('redirect_url'))->toBe($checkoutUrl);
 });
 
 test('users can pay a future month installment early', function () {

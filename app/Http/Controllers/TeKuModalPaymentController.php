@@ -31,6 +31,79 @@ class TeKuModalPaymentController extends Controller
             ->whereHas('loanApplication', fn ($query) => $query->where('user_id', $request->user()->id))
             ->firstOrFail();
 
+        $pendingPayment = DB::transaction(function () use ($installment) {
+            $lockedInstallment = LoanInstallment::query()->lockForUpdate()->findOrFail($installment->id);
+            if ($lockedInstallment->status === 'paid') {
+                throw ValidationException::withMessages(['payment_method' => 'Tagihan ini sudah lunas.']);
+            }
+
+            return $lockedInstallment->payments()
+                ->where('status', 'pending')
+                ->latest()
+                ->first();
+        });
+
+        if ($pendingPayment?->redirect_url) {
+            try {
+                $providerStatus = (array) $gateway->transactionStatus($pendingPayment->order_id);
+            } catch (\Exception $exception) {
+                Log::info('Midtrans sandbox checkout status could not be checked before resuming.', [
+                    'payment_id' => $pendingPayment->id,
+                    'exception' => $exception::class,
+                ]);
+
+                return back()->withErrors([
+                    'payment_method' => 'Status checkout belum dapat diperiksa. Coba lanjutkan lagi sebentar.',
+                ]);
+            }
+
+            if (($providerStatus['order_id'] ?? null) !== $pendingPayment->order_id
+                || ! $this->amountMatches((string) ($providerStatus['gross_amount'] ?? ''), $pendingPayment->amount)) {
+                Log::warning('Midtrans sandbox checkout status did not match the stored payment.', [
+                    'payment_id' => $pendingPayment->id,
+                ]);
+
+                return back()->withErrors([
+                    'payment_method' => 'Status checkout tidak cocok dengan tagihan. Coba lagi atau hubungi dukungan.',
+                ]);
+            }
+
+            $providerTransactionStatus = $providerStatus['transaction_status'] ?? null;
+            if (in_array($providerTransactionStatus, ['expire', 'deny', 'cancel'], true)) {
+                $this->applyProviderStatus($pendingPayment, $providerStatus);
+                $pendingPayment->refresh();
+
+                if ($pendingPayment->status === 'pending') {
+                    return back()->withErrors([
+                        'payment_method' => 'Status checkout belum dapat diperbarui. Coba lagi sebentar.',
+                    ]);
+                }
+
+                if ($pendingPayment->status === 'paid') {
+                    throw ValidationException::withMessages(['payment_method' => 'Tagihan ini sudah lunas.']);
+                }
+            } elseif (in_array($providerTransactionStatus, ['settlement', 'capture'], true)) {
+                $this->applyProviderStatus($pendingPayment, $providerStatus);
+                $pendingPayment->refresh();
+
+                if ($pendingPayment->status === 'paid') {
+                    throw ValidationException::withMessages(['payment_method' => 'Tagihan ini sudah lunas.']);
+                }
+
+                return back()->withErrors([
+                    'payment_method' => 'Pembayaran sedang diverifikasi Midtrans. Tunggu sebentar sebelum mencoba lagi.',
+                ]);
+            } else {
+                $request->session()->put('tekumodal.payment_animation.'.$pendingPayment->id, true);
+
+                return Inertia::location($pendingPayment->redirect_url);
+            }
+        } elseif ($pendingPayment) {
+            throw ValidationException::withMessages([
+                'payment_method' => 'Checkout sedang disiapkan. Tunggu sebentar lalu coba lagi.',
+            ]);
+        }
+
         $payment = DB::transaction(function () use ($installment, $validated) {
             $lockedInstallment = LoanInstallment::query()->lockForUpdate()->findOrFail($installment->id);
             if ($lockedInstallment->status === 'paid') {

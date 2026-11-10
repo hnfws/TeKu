@@ -66,7 +66,7 @@ class MidtransSandboxGateway
             ],
             'expiry' => [
                 'unit' => 'hour',
-                'duration' => 1,
+                'duration' => 24,
             ],
         ]);
 
