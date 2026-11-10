@@ -94,7 +94,6 @@ export default function TeKuModalIndex({
     simulator,
     installments,
     loans,
-    bankAccounts,
     metrics,
     paymentMethods,
     rewards,
@@ -697,60 +696,9 @@ export default function TeKuModalIndex({
                     </section>
                 )}
 
-                <section className="rounded-xl border border-neutral-200/50 bg-white p-6 shadow-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                            <h3 className="font-bold text-gray-900">Rekening bank terdaftar</h3>
-                            <p className="mt-1 text-xs text-gray-600">Nomor rekening disimpan terenkripsi dan hanya ditampilkan sebagian.</p>
-                        </div>
-                        <Link
-                            className="rounded-md border border-[#688265] px-4 py-2 text-xs font-semibold text-[#52704d] hover:bg-[#F6EFE5]"
-                            href="/tekumodal/bank-accounts/create"
-                        >
-                            Tambah rekening
-                        </Link>
-                    </div>
-                    {bankAccounts.length > 0 ? (
-                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                            {bankAccounts.map((account) => (
-                                <div className="rounded-lg bg-[#F6EFE5] p-4 text-sm" key={account.id}>
-                                    <p className="font-semibold text-gray-900">
-                                        {account.bank_name} · {account.masked_number}
-                                    </p>
-                                    <p className="mt-1 text-xs text-gray-600">{account.account_holder}</p>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <p className="mt-4 text-sm text-gray-600">
-                            Belum ada rekening bank. Tambahkan rekening sebelum mengajukan simulasi pinjaman.
-                        </p>
-                    )}
-                </section>
+                
 
-                {loans.length > 0 && (
-                    <section className="rounded-xl border border-neutral-200/50 bg-white p-6 shadow-sm">
-                        <h3 className="mb-4 font-bold text-gray-900">Riwayat simulasi pinjaman</h3>
-                        <div className="space-y-3">
-                            {loans.map((loan) => (
-                                <div className="flex flex-wrap justify-between gap-2 rounded-lg bg-[#F6EFE5] p-4 text-sm" key={loan.id}>
-                                    <div>
-                                        <p className="font-semibold">
-                                            {money(loan.principal)} · {loan.term_months} bulan
-                                        </p>
-                                        <p className="mt-1 text-xs text-gray-600">
-                                            Bunga flat {loan.monthly_interest_rate}%/bulan · Total bunga {money(loan.total_interest)}
-                                        </p>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="font-bold">{money(loan.total_repayment)}</p>
-                                        <p className="mt-1 text-xs text-gray-600">{loan.status === 'completed' ? 'Lunas' : 'Simulasi aktif'}</p>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </section>
-                )}
+
             </div>
 
             {methodModalOpen && (

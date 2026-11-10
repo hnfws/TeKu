@@ -199,7 +199,7 @@ export default function TeKuModalPaymentResult({ payment, statusCheckError, summ
                     )}
                     <div className="overflow-hidden rounded">
                         <TeKuModalConstellation
-                            animationDelayMs={3000}
+                            animationDelayMs={1000}
                             animateFromXp={summary.animate_constellation ? summary.previous_xp : undefined}
                             xp={summary.constellation_xp}
                         />
