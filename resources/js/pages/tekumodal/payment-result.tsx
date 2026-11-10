@@ -192,9 +192,14 @@ export default function TeKuModalPaymentResult({ payment, statusCheckError, summ
                     <p className="mt-1 mb-4 text-[11px] text-neutral-800">
                         Bayar secara teratur setiap bulan tanpa terlambat untuk mendapatkan bonus XP agar kamu bisa semakin cepat mendapatkan voucher!
                     </p>
+                    {summary.animate_constellation && (
+                        <p className="mb-3 text-xs font-medium text-[#52704d]" role="status">
+                            Pembayaran berhasil. Konstelasi akan bergerak sebentar lagi...
+                        </p>
+                    )}
                     <div className="overflow-hidden rounded">
                         <TeKuModalConstellation
-                            animationDelayMs={1500}
+                            animationDelayMs={3000}
                             animateFromXp={summary.animate_constellation ? summary.previous_xp : undefined}
                             xp={summary.constellation_xp}
                         />

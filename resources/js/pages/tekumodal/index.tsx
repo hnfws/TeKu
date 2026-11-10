@@ -119,7 +119,6 @@ export default function TeKuModalIndex({
         .filter((installment) => installment.status !== 'paid')
         .sort((a, b) => a.due_date.localeCompare(b.due_date));
     const firstUnpaidInstallment = unpaidInstallments[0];
-    const nextDueInstallment = [...installments].sort((a, b) => a.due_date.localeCompare(b.due_date))[0];
     const latestPaidInstallment = [...installments]
         .filter((installment) => installment.paid_at)
         .sort((a, b) => (b.paid_at ?? '').localeCompare(a.paid_at ?? ''))[0];
@@ -381,35 +380,131 @@ export default function TeKuModalIndex({
 
                 {period === 'next' && (
                     <section
-                        className="-mt-6 mb-6 rounded-b-xl border border-t-0 border-stone-200/80 bg-white px-6 py-10 text-center shadow-sm sm:py-14"
+                        className="-mt-6 mb-6 rounded-b-xl border border-t-0 border-stone-200/80 bg-white px-6 py-8 text-center shadow-sm sm:py-10"
                         data-purpose="next-bill-card"
                     >
-                        <h3 className="mb-4 text-base font-semibold text-gray-900">Tagihan Bulan Depan</h3>
-                        {installments.length === 0 ? (
-                            <p className="mx-auto max-w-xl py-5 text-xs text-gray-800">
-                                {loans.length === 0
-                                    ? 'Kamu belum melakukan pinjaman. Ayo mulai lakukan peminjaman dan jalankan bisnis mu!'
-                                    : `Tidak ada tagihan untuk ${monthLabel}.`}
-                            </p>
+                        {allPaid ? (
+                            <>
+                                <h3 className="mb-5 text-base font-bold text-neutral-900">Tagihan Bulan Depan</h3>
+                                <div className="mb-4 flex justify-center">
+                                    <div aria-hidden="true" className="relative inline-flex h-16 w-16 items-center justify-center text-[#688264]">
+                                        <svg
+                                            className="h-16 w-14"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth="2.5"
+                                            viewBox="0 0 48 56"
+                                        >
+                                            <path d="M6 4h26l10 10v36H6z" />
+                                            <path d="M32 4v10h10" />
+                                        </svg>
+                                        <span className="absolute -right-0.5 -bottom-1 rounded-full bg-white p-0.5">
+                                            <svg
+                                                className="h-6 w-6"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth="2.5"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <circle cx="12" cy="12" r="10" />
+                                                <path d="m8 12 3 3 5-5" />
+                                            </svg>
+                                        </span>
+                                    </div>
+                                </div>
+                                <h4 className="mb-2 text-2xl font-bold tracking-tight text-neutral-900">Lunas</h4>
+                                <p className="text-xs font-normal text-neutral-800">Tagihan bulan depan sudah dibayarkan.</p>
+                            </>
+                        ) : installments.length === 0 ? (
+                            <>
+                                <h3 className="mb-2 text-base font-semibold text-gray-900">Tagihan Bulan Depan</h3>
+                                <p className="mx-auto max-w-xl py-5 text-xs text-gray-800">
+                                    {loans.length === 0
+                                        ? 'Kamu belum melakukan pinjaman. Ayo mulai lakukan peminjaman dan jalankan bisnis mu!'
+                                        : `Tidak ada tagihan untuk ${monthLabel}.`}
+                                </p>
+                            </>
+                        ) : unpaidInstallments.length === 0 ? (
+                            <>
+                                <h3 className="mb-2 text-base font-semibold text-gray-900">Tagihan Bulan Depan</h3>
+                                <p className="mx-auto max-w-xl py-5 text-xs text-gray-800">Tidak ada tagihan tersisa untuk {monthLabel}.</p>
+                            </>
                         ) : (
                             <>
-                                <p className="mb-3 text-3xl font-extrabold tracking-tight text-gray-900 lg:text-[38px]">
-                                    {money(installments.reduce((total, installment) => total + installment.amount, 0))}
+                                <h3 className="mb-3 text-base font-semibold text-gray-900">Tagihan Bulan Depan</h3>
+                                <p className="mb-2 text-[32px] font-bold tracking-wider text-slate-900 md:text-[34px]">{money(totalDue)}</p>
+                                <p className="mb-5 text-[11px] font-normal text-slate-600">
+                                    Jatuh tempo {firstUnpaidInstallment ? date(firstUnpaidInstallment.due_date) : monthLabel}
                                 </p>
-                                <p className="text-xs font-medium text-gray-800">
-                                    Jatuh tempo {nextDueInstallment ? date(nextDueInstallment.due_date) : monthLabel}
-                                </p>
+                                <div className="mx-auto max-w-[360px]">
+                                    <button
+                                        className="mb-5 flex w-full items-center justify-between rounded bg-[#d7dadb] px-3 py-1.5 text-left text-[10px] font-medium text-slate-800 shadow-inner transition hover:bg-[#cfd2d4]"
+                                        onClick={() => setMethodModalOpen(true)}
+                                        type="button"
+                                    >
+                                        <span>Pilih metode pembayaran</span>
+                                        <span className="flex items-center gap-1 font-semibold text-slate-900">
+                                            {selectedMethod?.label ?? 'Pilih'}
+                                            <i aria-hidden="true" className="fa-solid fa-chevron-right text-[9px]" />
+                                        </span>
+                                    </button>
+                                    <button
+                                        className="w-32 rounded bg-[#698165] py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-[#5a7156] disabled:opacity-60"
+                                        disabled={processingInstallment !== null || !paymentMethod}
+                                        onClick={() => payInstallment(firstUnpaidInstallment.id)}
+                                        type="button"
+                                    >
+                                        {processingInstallment === firstUnpaidInstallment.id
+                                            ? 'Memproses...'
+                                            : firstUnpaidInstallment.latest_payment?.status === 'pending'
+                                              ? 'Lanjutkan Bayar'
+                                              : 'Bayar Cicilan'}
+                                    </button>
+                                    <p className="mt-2 text-[10px] text-slate-500">
+                                        Tombol ini membayar cicilan ke-{firstUnpaidInstallment.number} sebesar {money(firstUnpaidInstallment.amount)}.
+                                    </p>
+                                </div>
                                 {installments.length > 1 && (
                                     <div className="mx-auto mt-6 max-w-3xl space-y-2 border-t border-stone-200 pt-5 text-left">
                                         {installments.map((installment) => (
-                                            <div className="flex flex-wrap items-center justify-between gap-3 px-2 py-2 text-xs" key={installment.id}>
-                                                <span className="font-semibold text-gray-800">Cicilan ke-{installment.number}</span>
-                                                <span className="text-gray-600">{money(installment.amount)}</span>
-                                                <span className="text-gray-600">Jatuh tempo {date(installment.due_date)}</span>
-                                            </div>
+                                            <article
+                                                className="flex flex-wrap items-center justify-between gap-3 rounded border border-stone-200 px-4 py-3 text-xs"
+                                                key={installment.id}
+                                            >
+                                                <div>
+                                                    <p className="font-semibold text-gray-800">Cicilan ke-{installment.number}</p>
+                                                    <p className="mt-1 text-gray-600">
+                                                        {money(installment.amount)} · Jatuh tempo {date(installment.due_date)}
+                                                    </p>
+                                                </div>
+                                                {installment.status === 'paid' ? (
+                                                    <span className="text-[10px] font-semibold text-emerald-700">Lunas</span>
+                                                ) : (
+                                                    <button
+                                                        className="rounded border border-[#698165] px-3 py-1 text-[10px] font-semibold text-[#4f684a] hover:bg-[#f6f3ed] disabled:opacity-60"
+                                                        disabled={processingInstallment !== null || !paymentMethod}
+                                                        onClick={() => payInstallment(installment.id)}
+                                                        type="button"
+                                                    >
+                                                        {processingInstallment === installment.id
+                                                            ? 'Memproses...'
+                                                            : installment.latest_payment?.status === 'pending'
+                                                              ? 'Lanjutkan'
+                                                              : 'Bayar'}
+                                                    </button>
+                                                )}
+                                            </article>
                                         ))}
                                     </div>
                                 )}
+                                <p className="mt-5 text-[10px] text-gray-500">
+                                    Tagihan bulan depan dapat dibayar lebih awal. Pembayaran menggunakan Midtrans Sandbox dan tidak memproses uang
+                                    sungguhan.
+                                </p>
                             </>
                         )}
                     </section>

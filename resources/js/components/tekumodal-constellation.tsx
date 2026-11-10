@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 
+const constellationGreen = '#9bd18b';
+const constellationGreenRgb = '155, 209, 139';
+
 const stars: { x: number; y: number; glow: number }[] = [
     { x: 0.18, y: 0.35, glow: 0 },
     { x: 0.32, y: 0.35, glow: 0 },
@@ -101,9 +104,9 @@ export default function TeKuModalConstellation({ xp, animateFromXp, animationDel
             const scale = Math.min(width * 0.45, height * 0.5);
 
             ctx.translate(cx, cy);
-            ctx.strokeStyle = 'rgba(76, 201, 240, 0.28)';
-            ctx.fillStyle = 'rgba(76, 201, 240, 0.03)';
-            ctx.shadowColor = '#4cc9f0';
+            ctx.strokeStyle = `rgba(${constellationGreenRgb}, 0.28)`;
+            ctx.fillStyle = `rgba(${constellationGreenRgb}, 0.03)`;
+            ctx.shadowColor = constellationGreen;
             ctx.shadowBlur = 16;
             ctx.lineWidth = 2.2;
             ctx.lineCap = 'round';
@@ -143,13 +146,13 @@ export default function TeKuModalConstellation({ xp, animateFromXp, animationDel
             ctx.stroke();
 
             ctx.setLineDash([4, 4]);
-            ctx.strokeStyle = 'rgba(76, 201, 240, 0.2)';
+            ctx.strokeStyle = `rgba(${constellationGreenRgb}, 0.2)`;
             ctx.beginPath();
             ctx.roundRect(-scale * 0.42, scale * 0.09, scale * 0.84, scale * 0.34, [12]);
             ctx.stroke();
             ctx.setLineDash([]);
 
-            ctx.strokeStyle = 'rgba(76, 201, 240, 0.28)';
+            ctx.strokeStyle = `rgba(${constellationGreenRgb}, 0.28)`;
             ctx.beginPath();
             ctx.rect(-scale * 0.38, scale * 0.2, scale * 0.34, scale * 0.2);
             ctx.stroke();
@@ -173,7 +176,7 @@ export default function TeKuModalConstellation({ xp, animateFromXp, animationDel
         const triggerExplosion = (x: number, y: number) => {
             shakeTime = 14;
             shockwaves.push({ x, y, radius: 4, alpha: 1 });
-            const colors = ['#ffffff', '#4cc9f0', '#4895ef', '#7209b7', '#f72585', '#70e000', '#ffd166'];
+            const colors = ['#ffffff', constellationGreen, '#698165', '#70e000', '#d2f5b0'];
             for (let i = 0; i < 50; i++) {
                 const angle = Math.random() * Math.PI * 2;
                 const speed = 4 + Math.random() * 10;
@@ -248,9 +251,9 @@ export default function TeKuModalConstellation({ xp, animateFromXp, animationDel
                 ctx.beginPath();
                 ctx.moveTo(p1.x, p1.y);
                 ctx.lineTo(p2.x, p2.y);
-                ctx.strokeStyle = 'rgba(156, 217, 255, 0.85)';
+                ctx.strokeStyle = 'rgba(190, 235, 174, 0.9)';
                 ctx.lineWidth = 3;
-                ctx.shadowColor = '#4cc9f0';
+                ctx.shadowColor = constellationGreen;
                 ctx.shadowBlur = 16;
                 ctx.stroke();
                 ctx.shadowBlur = 0;
@@ -267,19 +270,19 @@ export default function TeKuModalConstellation({ xp, animateFromXp, animationDel
                 ctx.lineTo(currentX, currentY);
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
                 ctx.lineWidth = 4;
-                ctx.shadowColor = '#4cc9f0';
+                ctx.shadowColor = constellationGreen;
                 ctx.shadowBlur = 22;
                 ctx.stroke();
                 ctx.shadowBlur = 0;
-                drawStarNode(currentX, currentY, 4, 8, 3, '#ffffff', '#4cc9f0');
+                drawStarNode(currentX, currentY, 4, 8, 3, '#ffffff', constellationGreen);
             }
 
             shockwaves.forEach((wave, index) => {
                 ctx.beginPath();
                 ctx.arc(wave.x, wave.y, wave.radius, 0, Math.PI * 2);
-                ctx.strokeStyle = `rgba(76, 201, 240, ${wave.alpha})`;
+                ctx.strokeStyle = `rgba(${constellationGreenRgb}, ${wave.alpha})`;
                 ctx.lineWidth = 4;
-                ctx.shadowColor = '#4cc9f0';
+                ctx.shadowColor = constellationGreen;
                 ctx.shadowBlur = 22;
                 ctx.stroke();
                 ctx.shadowBlur = 0;
@@ -316,9 +319,9 @@ export default function TeKuModalConstellation({ xp, animateFromXp, animationDel
                     const innerRadius = 4 + Math.sin(star.glow);
                     ctx.beginPath();
                     ctx.arc(pos.x, pos.y, outerRadius + 8, 0, Math.PI * 2);
-                    ctx.fillStyle = 'rgba(76, 201, 240, 0.25)';
+                    ctx.fillStyle = `rgba(${constellationGreenRgb}, 0.25)`;
                     ctx.fill();
-                    drawStarNode(pos.x, pos.y, 4, outerRadius, innerRadius, '#ffffff', '#4cc9f0');
+                    drawStarNode(pos.x, pos.y, 4, outerRadius, innerRadius, '#ffffff', constellationGreen);
                 } else {
                     drawStarNode(pos.x, pos.y, 4, 5, 2, 'rgba(255, 255, 255, 0.35)', null);
                 }

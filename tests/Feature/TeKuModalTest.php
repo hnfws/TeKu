@@ -397,6 +397,53 @@ test('Inertia payment requests are redirected to the Midtrans sandbox checkout',
         ->and($payment->redirect_url)->toBe($checkoutUrl);
 });
 
+test('users can pay a future month installment early', function () {
+    $user = User::factory()->create();
+    $account = BankAccount::create([
+        'user_id' => $user->id,
+        'account_holder' => 'Test User',
+        'account_number' => '123456789',
+        'bank_name' => 'BCA',
+    ]);
+    $loan = LoanApplication::create([
+        'user_id' => $user->id,
+        'bank_account_id' => $account->id,
+        'principal' => 500_000,
+        'term_months' => 3,
+        'monthly_interest_rate' => 2,
+        'total_interest' => 30_000,
+        'total_repayment' => 530_000,
+        'status' => 'simulation_active',
+    ]);
+    $installment = LoanInstallment::create([
+        'loan_application_id' => $loan->id,
+        'installment_number' => 2,
+        'due_date' => now()->addMonthNoOverflow()->toDateString(),
+        'amount' => 1_000,
+    ]);
+    $checkoutUrl = 'https://app.sandbox.midtrans.com/snap/v4/redirection/future-installment';
+    $gateway = Mockery::mock(MidtransSandboxGateway::class);
+    $gateway->shouldReceive('createRedirectUrl')->once()->andReturn($checkoutUrl);
+    app()->instance(MidtransSandboxGateway::class, $gateway);
+
+    $this->actingAs($user)
+        ->get('/tekumodal?period=next')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('period', 'next')
+            ->has('installments', 1)
+            ->where('installments.0.id', $installment->id)
+            ->where('installments.0.number', 2)
+            ->where('installments.0.status', 'pending'));
+
+    $this->withHeader('X-Inertia', 'true')
+        ->post("/tekumodal/installments/{$installment->id}/payments", ['payment_method' => 'qris'])
+        ->assertStatus(409)
+        ->assertHeader('X-Inertia-Location', $checkoutUrl);
+
+    expect(LoanPayment::query()->where('loan_installment_id', $installment->id)->firstOrFail()->status)->toBe('pending');
+});
+
 test('Midtrans notifications require a valid sandbox signature and settle an installment idempotently', function () {
     config()->set('services.midtrans.server_key', 'SB-Mid-server-test-key');
 
