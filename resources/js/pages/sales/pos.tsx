@@ -136,9 +136,7 @@ export default function Pos({ products, promotionsAvailable }: PosProps) {
             <aside className="flex w-full shrink-0 flex-col justify-between border-b border-[#e2d8c7] bg-[#f2ebe0] md:w-[240px] md:border-r md:border-b-0">
                 <div>
                     <div className="flex items-center justify-center border-b border-[#e2d8c7] p-5">
-                        <div className="flex h-16 w-full items-center justify-center rounded bg-[#cfd4d9] text-xl font-bold tracking-wider text-neutral-800 shadow-inner">
-                            Logo
-                        </div>
+                        <img src="/assets/teku-auth-logo.png" alt="TeKu" className="h-16 w-full object-contain" />
                     </div>
                     <nav aria-label="Menu penjualan" className="flex border-b border-[#e2d8c7] md:block">
                         <Link
