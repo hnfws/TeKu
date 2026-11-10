@@ -14,6 +14,31 @@ test('forgot password screen can be rendered', function () {
             ->where('otpSent', false));
 });
 
+test('authenticated users can use the forgot password flow from settings', function () {
+    Notification::fake();
+    $user = User::factory()->create();
+    $this->actingAs($user);
+
+    $this->get('/forgot-password')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->component('auth/forgot-password'));
+
+    $this->post('/forgot-password', ['identifier' => $user->email])
+        ->assertRedirect('/forgot-password')
+        ->assertSessionHas('password_reset_otp_sent', true);
+
+    $notification = Notification::sent($user, PasswordResetOtp::class)->first();
+    expect($notification)->toBeInstanceOf(PasswordResetOtp::class);
+
+    $this->post('/reset-password', [
+        'otp' => $notification->code,
+        'password' => 'New-password-123',
+        'password_confirmation' => 'New-password-123',
+    ])->assertRedirect(route('password.success'));
+
+    expect(Hash::check('New-password-123', $user->fresh()->password))->toBeTrue();
+});
+
 test('registered email receives a password reset otp', function () {
     Notification::fake();
     $user = User::factory()->create();

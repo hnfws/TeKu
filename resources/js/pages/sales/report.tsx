@@ -53,7 +53,7 @@ export default function SalesReport({ month, chart, bestSellers, metrics, filter
         <ManagementLayout title="Laporan Penjualan">
             <div className="mx-auto max-w-7xl space-y-6">
                 <header className="mb-2 flex flex-wrap items-baseline justify-between gap-3">
-                    <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Penjualan <span className="text-xl font-bold text-gray-800">/Laporan Penjualan</span></h1>
+                    <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Laporan Penjualan</h1>
                     <Link className="text-sm font-semibold text-[#52704d] hover:underline" href="/sales">Kembali ke transaksi</Link>
                 </header>
                 <section className="rounded-2xl border border-stone-200/60 bg-white p-5 shadow-sm sm:p-6" data-purpose="chart-container">

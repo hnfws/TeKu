@@ -1,5 +1,5 @@
-import { useForm, usePage } from '@inertiajs/react';
-import { FormEventHandler, useRef, useState } from 'react';
+import { Link, useForm, usePage } from '@inertiajs/react';
+import { useState } from 'react';
 
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
@@ -10,42 +10,11 @@ import SettingsLayout from '@/layouts/settings/layout';
 
 export default function Password() {
     const { auth } = usePage<{ auth: { user: { email: string; phone?: string | null } } }>().props;
-    const [passwordFormOpen, setPasswordFormOpen] = useState(false);
     const [emailFormOpen, setEmailFormOpen] = useState(false);
     const [phoneFormOpen, setPhoneFormOpen] = useState(false);
-    const passwordInput = useRef<HTMLInputElement>(null);
-    const currentPasswordInput = useRef<HTMLInputElement>(null);
 
     const emailForm = useForm({ email: auth.user.email, current_password: '' });
     const phoneForm = useForm({ phone: auth.user.phone ?? '', current_password: '' });
-    const { data, setData, errors, put, reset, processing } = useForm({
-        current_password: '',
-        password: '',
-        password_confirmation: '',
-    });
-
-    const updatePassword: FormEventHandler = (e) => {
-        e.preventDefault();
-
-        put('/settings/password', {
-            preserveScroll: true,
-            onSuccess: () => {
-                reset();
-                setPasswordFormOpen(false);
-            },
-            onError: (formErrors) => {
-                if (formErrors.password) {
-                    reset('password', 'password_confirmation');
-                    passwordInput.current?.focus();
-                }
-
-                if (formErrors.current_password) {
-                    reset('current_password');
-                    currentPasswordInput.current?.focus();
-                }
-            },
-        });
-    };
 
     const updateContact = (e: React.FormEvent, type: 'email' | 'phone') => {
         e.preventDefault();
@@ -177,55 +146,9 @@ export default function Password() {
                         )}
                     </section>
 
-                    <Button className="bg-[#688463] text-white hover:bg-[#55714f]" onClick={() => setPasswordFormOpen((open) => !open)} type="button">
-                        {passwordFormOpen ? 'Batal' : 'Ganti Password'}
+                    <Button asChild className="bg-[#688463] text-white hover:bg-[#55714f]">
+                        <Link href={route('password.request')}>Ganti Password</Link>
                     </Button>
-
-                    {passwordFormOpen && (
-                        <form className="space-y-4 border-t border-stone-200 pt-5" onSubmit={updatePassword}>
-                            <div className="grid gap-2">
-                                <Label htmlFor="current_password">Password Saat Ini</Label>
-                                <Input
-                                    id="current_password"
-                                    ref={currentPasswordInput}
-                                    value={data.current_password}
-                                    onChange={(e) => setData('current_password', e.target.value)}
-                                    type="password"
-                                    autoComplete="current-password"
-                                />
-                                <InputError message={errors.current_password} />
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="password">Password Baru</Label>
-                                <Input
-                                    id="password"
-                                    ref={passwordInput}
-                                    value={data.password}
-                                    onChange={(e) => setData('password', e.target.value)}
-                                    type="password"
-                                    autoComplete="new-password"
-                                />
-                                <InputError message={errors.password} />
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="password_confirmation">Konfirmasi Password Baru</Label>
-                                <Input
-                                    id="password_confirmation"
-                                    value={data.password_confirmation}
-                                    onChange={(e) => setData('password_confirmation', e.target.value)}
-                                    type="password"
-                                    autoComplete="new-password"
-                                />
-                                <InputError message={errors.password_confirmation} />
-                            </div>
-
-                            <Button className="bg-[#688463] text-white hover:bg-[#55714f]" disabled={processing}>
-                                Simpan Password
-                            </Button>
-                        </form>
-                    )}
                 </div>
             </SettingsLayout>
         </ManagementLayout>
