@@ -89,47 +89,11 @@ Gamifikasi TeKuModal menggunakan visualisasi konstelasi untuk menunjukkan progre
 
 ---
 
-## Demo dan Screenshot
+## Demo
 
 ### Live Demo
 
-URL demo publik belum dicantumkan di repository. Tambahkan tautan deployment di sini setelah URL dapat dibagikan kepada juri:
-
 https://gtnic.onrender.com/dashboard
-
-### Screenshot Aplikasi
-
-Tambahkan screenshot aktual ke `docs/screenshots/`, lalu ganti placeholder berikut dengan nama file yang sesuai. Pastikan data pribadi dan informasi transaksi disamarkan.
-
-<div align="center">
-
-**Dashboard**
-
-<!-- <img src="docs/screenshots/dashboard.png" alt="Dashboard TeKu" width="800"> -->
-
-_Screenshot dashboard — ringkasan usaha, kalender, dan pengingat tenant._
-
-**Inventaris dan POS**
-
-<!-- <img src="docs/screenshots/inventory-pos.png" alt="Inventaris dan POS TeKu" width="800"> -->
-
-_Screenshot inventaris dan POS — pengelolaan produk, stok, dan transaksi._
-
-**Event dan peluang tenant**
-
-<!-- <img src="docs/screenshots/events.png" alt="Direktori event TeKu" width="800"> -->
-
-_Screenshot direktori event — pencarian kategori dan informasi peluang tenant._
-
-**TeKuModal dan gamifikasi**
-
-<!-- <img src="docs/screenshots/tekumodal.png" alt="TeKuModal dan konstelasi" width="800"> -->
-
-_Screenshot TeKuModal — simulasi angsuran, progres konstelasi, XP, dan reward._
-
-</div>
-
----
 
 ## Teknologi
 
