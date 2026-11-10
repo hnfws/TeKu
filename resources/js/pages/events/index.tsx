@@ -1,6 +1,7 @@
 import { Link, router } from '@inertiajs/react';
 
 import ManagementLayout from '@/layouts/management-layout';
+import { eventCategoryLabel } from '@/lib/event-category';
 
 type EventItem = {
     id: number;
@@ -87,7 +88,7 @@ export default function EventsIndex({ events, filters, registeredTenantIds, cate
                             }
                             type="button"
                         >
-                            {category}
+                            {eventCategoryLabel(category)}
                         </button>
                     ))}
                     {!categories.length && <span className="text-xs text-stone-400">Kategori belum tersedia.</span>}
@@ -143,7 +144,7 @@ export default function EventsIndex({ events, filters, registeredTenantIds, cate
                                             )}
                                             <p className="text-[11px] text-stone-400">
                                                 Oleh {event.organizer_name || 'Penyelenggara event'}
-                                                {event.category ? ` · ${event.category}` : ''}
+                                                {event.category ? ` · ${eventCategoryLabel(event.category)}` : ''}
                                             </p>
                                         </div>
                                     </Link>

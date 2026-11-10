@@ -3,6 +3,7 @@
 use App\Jobs\ProcessScrapedEvent;
 use App\Models\Event;
 use App\Models\Tenant;
+use App\Support\EventCategory;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Schema;
@@ -26,12 +27,37 @@ it('accepts a valid scraper token before validating the payload', function () {
     ])->assertStatus(422);
 });
 
+it('rejects scraper categories outside the supported event categories', function () {
+    config(['services.scraper.token' => 'expected-token']);
+
+    $this->withToken('expected-token')->postJson('/api/scraped-events', [
+        'title' => 'Event Tenant Call',
+        'category' => 'conference',
+        'latitude' => -6.2,
+        'longitude' => 106.8,
+        'instagram_post_url' => 'https://www.instagram.com/p/shortcode/',
+        'account_name' => 'pestapora',
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('category');
+});
+
+it('infers event categories from scraped captions', function () {
+    expect(EventCategory::infer('Festival Musik Jakarta'))->toBe('festival')
+        ->and(EventCategory::infer('Konser Musik Jakarta'))->toBe('music')
+        ->and(EventCategory::infer('Pameran Seni Kontemporer'))->toBe('exhibition')
+        ->and(EventCategory::infer('Pentas Seni Rupa'))->toBe('art')
+        ->and(EventCategory::infer('Festival Kuliner'))->toBe('festival')
+        ->and(EventCategory::infer('Pendaftaran tenant'))->toBe('bazaar')
+        ->and(EventCategory::infer('Informasi umum acara'))->toBeNull();
+});
+
 it('processes scraped event persistence synchronously and acknowledges the request', function () {
     Bus::fake();
     config(['services.scraper.token' => 'expected-token']);
 
     $this->postJson('/api/scraped-events', [
         'title' => 'Event Tenant Call',
+        'category' => 'art',
         'description' => 'Limited slot at ICE BSD',
         'location_name' => 'Jakarta',
         'latitude' => -6.2,
@@ -49,7 +75,7 @@ it('processes scraped event persistence synchronously and acknowledges the reque
         'image_received' => false,
     ]);
 
-    Bus::assertDispatchedSync(ProcessScrapedEvent::class);
+    Bus::assertDispatchedSync(ProcessScrapedEvent::class, fn (ProcessScrapedEvent $job) => $job->payload['category'] === 'art');
 });
 
 it('scores priority events and stores recognized deadlines', function () {
@@ -91,6 +117,7 @@ it('scores priority events and stores recognized deadlines', function () {
             'latitude' => -6.2,
             'longitude' => 106.8,
             'instagram_post_url' => 'https://www.instagram.com/p/priority-test/',
+            'category' => 'music',
             'account_name' => 'pestapora',
             'deadline_date' => now()->addDays(2)->toISOString(),
             'start_date' => now()->addDays(7)->toISOString(),
@@ -99,8 +126,8 @@ it('scores priority events and stores recognized deadlines', function () {
             'tenant_price' => 1500000,
         ]))->handle();
         (new ProcessScrapedEvent([
-            'title' => 'Updated Tenant Call',
-            'description' => 'Limited slot at ICE BSD, updated booth details.',
+            'title' => 'Updated Event Call',
+            'description' => 'Limited slot at ICE BSD, updated information.',
             'location_name' => 'Jakarta',
             'latitude' => -6.2,
             'longitude' => 106.8,
@@ -112,7 +139,7 @@ it('scores priority events and stores recognized deadlines', function () {
         ]))->handle();
 
         (new ProcessScrapedEvent([
-            'title' => 'General Vendor Applications',
+            'title' => 'Festival Kuliner Nusantara',
             'description' => 'General vendor applications are open.',
             'location_name' => 'Jakarta',
             'latitude' => -6.2,
@@ -124,10 +151,12 @@ it('scores priority events and stores recognized deadlines', function () {
         expect(Event::query()->count())->toBe(2)
             ->and(Event::query()->first()->priority_score)->toBe(100)
             ->and(Event::query()->first()->is_priority)->toBeTrue()
-            ->and(Event::query()->first()->title)->toBe('Updated Tenant Call')
+            ->and(Event::query()->first()->title)->toBe('Updated Event Call')
+            ->and(Event::query()->first()->category)->toBe('music')
             ->and(Event::query()->first()->start_date)->not->toBeNull()
             ->and((int) Event::query()->first()->price)->toBe(50000)
             ->and(Event::query()->where('source_account', 'info.tenant')->first()->is_priority)->toBeFalse()
+            ->and(Event::query()->where('source_account', 'info.tenant')->first()->category)->toBe('festival')
             ->and(Event::query()->where('source_account', 'info.tenant')->first()->start_date)->toBeNull()
             ->and((int) Tenant::query()->first()->price)->toBe(2000000)
             ->and(Carbon::parse(Tenant::query()->first()->deadline_date)->isFuture())->toBeTrue();

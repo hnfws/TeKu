@@ -2,6 +2,7 @@ import { Link, router, usePage } from '@inertiajs/react';
 
 import DashboardCalendar from '@/components/dashboard-calendar';
 import ManagementLayout from '@/layouts/management-layout';
+import { eventCategoryLabel } from '@/lib/event-category';
 
 type EventItem = {
     id: number;
@@ -139,7 +140,7 @@ export default function EventsDashboard({ tenantRegistrations, calendarEvents, e
                             onClick={() => router.get('/event-dashboard', { category }, { preserveState: true, preserveScroll: true, replace: true })}
                             type="button"
                         >
-                            {category}
+                            {eventCategoryLabel(category)}
                         </button>
                     ))}
                 </section>

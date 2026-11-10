@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { eventCategoryLabel } from '@/lib/event-category';
 
 interface EventTenant {
     id: number;
@@ -120,7 +121,7 @@ export default function EventRadar({ events }: Props) {
                                                 fontWeight: 'bold',
                                                 textTransform: 'uppercase'
                                             }}>
-                                                {item.category}
+                                                {eventCategoryLabel(item.category)}
                                             </span>
                                             <span style={{ fontSize: '12px', color: '#64748b' }}>
                                                 📍 {item.location_name}
