@@ -208,6 +208,37 @@ test('dashboard shows upcoming dates for registered tenant bookings', function (
         ->where('upcomingTenantBookings.0.event.location_name', 'Jakarta'));
 });
 
+test('dashboard reminders show all bookings on the nearest event date only', function () {
+    $user = User::factory()->create();
+    $nearestDate = now()->addDays(3);
+
+    $createRegisteredEvent = function (string $title, $startDate) use ($user): Event {
+        $event = Event::create([
+            'title' => $title,
+            'category' => 'bazaar',
+            'location_name' => 'Jakarta',
+            'start_date' => $startDate,
+            'end_date' => $startDate->copy()->addHours(4),
+            'latitude' => -6.2,
+            'longitude' => 106.8,
+        ]);
+        $tenant = Tenant::create(['event_id' => $event->id, 'tenant_type' => 'curated_call']);
+        TenantRegistration::create(['tenant_id' => $tenant->id, 'user_id' => $user->id]);
+
+        return $event;
+    };
+
+    $nearestEvent = $createRegisteredEvent('Event Terdekat', $nearestDate->copy()->setTime(10, 0));
+    $sameDayEvent = $createRegisteredEvent('Event di Hari yang Sama', $nearestDate->copy()->setTime(18, 0));
+    $createRegisteredEvent('Event Hari Berikutnya', $nearestDate->copy()->addDay()->setTime(9, 0));
+
+    $this->actingAs($user)->get('/dashboard')->assertInertia(fn ($page) => $page
+        ->component('dashboard')
+        ->has('upcomingTenantBookings', 2)
+        ->where('upcomingTenantBookings.0.event.id', $nearestEvent->id)
+        ->where('upcomingTenantBookings.1.event.id', $sameDayEvent->id));
+});
+
 test('users cannot mark tenant registration after that tenant deadline', function () {
     $user = User::factory()->create();
     $event = Event::create([

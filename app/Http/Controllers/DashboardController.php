@@ -20,6 +20,32 @@ class DashboardController extends Controller
         $today = now()->startOfDay();
         $month = now()->startOfMonth();
         $nextMonth = now()->startOfMonth()->addMonthNoOverflow();
+        $upcomingTenantBookingsQuery = TenantRegistration::query()
+            ->join('event_tenants', 'tenant_registrations.tenant_id', '=', 'event_tenants.id')
+            ->join('events', 'event_tenants.event_id', '=', 'events.id')
+            ->where('tenant_registrations.user_id', $userId)
+            ->whereNotNull('events.start_date')
+            ->where('events.start_date', '>=', now());
+        $closestUpcomingEventDate = (clone $upcomingTenantBookingsQuery)->min('events.start_date');
+        $upcomingTenantBookings = $closestUpcomingEventDate
+            ? $upcomingTenantBookingsQuery
+                ->whereDate('events.start_date', Carbon::parse($closestUpcomingEventDate)->toDateString())
+                ->orderBy('events.start_date')
+                ->with('tenant.event:id,title,location_name,start_date')
+                ->select('tenant_registrations.*')
+                ->get()
+                ->map(fn (TenantRegistration $registration) => [
+                    'id' => $registration->id,
+                    'event' => $registration->tenant?->event ? [
+                        'id' => $registration->tenant->event->id,
+                        'title' => $registration->tenant->event->title,
+                        'location_name' => $registration->tenant->event->location_name,
+                        'start_date' => Carbon::parse($registration->tenant->event->start_date, config('app.timezone'))->toIso8601String(),
+                    ] : null,
+                ])
+                ->filter(fn (array $booking) => $booking['event'] !== null)
+                ->values()
+            : collect();
 
         return Inertia::render('dashboard', [
             'metrics' => [
@@ -62,28 +88,7 @@ class DashboardController extends Controller
                     'start_date' => Carbon::parse($event->start_date)->toDateString(),
                 ])
                 ->values(),
-            'upcomingTenantBookings' => TenantRegistration::query()
-                ->join('event_tenants', 'tenant_registrations.tenant_id', '=', 'event_tenants.id')
-                ->join('events', 'event_tenants.event_id', '=', 'events.id')
-                ->where('tenant_registrations.user_id', $userId)
-                ->whereNotNull('events.start_date')
-                ->where('events.start_date', '>=', now())
-                ->orderBy('events.start_date')
-                ->limit(3)
-                ->with('tenant.event:id,title,location_name,start_date')
-                ->select('tenant_registrations.*')
-                ->get()
-                ->map(fn (TenantRegistration $registration) => [
-                    'id' => $registration->id,
-                    'event' => $registration->tenant?->event ? [
-                        'id' => $registration->tenant->event->id,
-                        'title' => $registration->tenant->event->title,
-                        'location_name' => $registration->tenant->event->location_name,
-                        'start_date' => Carbon::parse($registration->tenant->event->start_date, config('app.timezone'))->toIso8601String(),
-                    ] : null,
-                ])
-                ->filter(fn (array $booking) => $booking['event'] !== null)
-                ->values(),
+            'upcomingTenantBookings' => $upcomingTenantBookings,
             'products' => InventoryProduct::query()
                 ->where('user_id', $userId)
                 ->orderByRaw('CASE WHEN stock_quantity = 0 THEN 0 WHEN stock_quantity <= min_stock THEN 1 ELSE 2 END')
