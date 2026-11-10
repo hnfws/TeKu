@@ -95,7 +95,7 @@ Gamifikasi TeKuModal menggunakan visualisasi konstelasi untuk menunjukkan progre
 
 URL demo publik belum dicantumkan di repository. Tambahkan tautan deployment di sini setelah URL dapat dibagikan kepada juri:
 
-**[URL DEMO PUBLIK — LENGKAPI SEBELUM SUBMIT]**
+https://gtnic.onrender.com/dashboard
 
 ### Screenshot Aplikasi
 
