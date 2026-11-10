@@ -31,7 +31,7 @@ type Product = {
 };
 
 interface DashboardProps {
-    metrics: { dailySales: number; monthlySales: number; stockUnits: number; productCount: number };
+    metrics: { dailySales: number; monthlySales: number; nextMonthBills: number; productCount: number };
     registeredEvents: EventItem[];
     calendarEvents: { id: number; title: string; start_date: string | null }[];
     upcomingEventReminders: EventReminder[];
@@ -85,7 +85,7 @@ export default function Dashboard({ metrics, registeredEvents, calendarEvents, u
                     {[
                         { label: 'Total Penjualan Harian', value: money(metrics.dailySales), icon: 'fa-sack-dollar' },
                         { label: 'Total Penjualan Bulanan', value: money(metrics.monthlySales), icon: 'fa-chart-line' },
-                        { label: 'Jumlah Stok Saat Ini', value: `${metrics.stockUnits.toLocaleString('id-ID')} unit`, icon: 'fa-boxes-stacked' },
+                        { label: 'Total Tagihan Bulan Depan', value: money(metrics.nextMonthBills), icon: 'fa-file-invoice-dollar' },
                         { label: 'Jumlah Produk', value: `${metrics.productCount} produk`, icon: 'fa-cube' },
                     ].map((item) => (
                         <article key={item.label} className="rounded-2xl bg-white p-5 shadow-sm">

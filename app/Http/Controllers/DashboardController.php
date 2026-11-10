@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Event;
 use App\Models\EventRegistration;
 use App\Models\InventoryProduct;
+use App\Models\LoanInstallment;
 use App\Models\Sale;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -18,12 +19,19 @@ class DashboardController extends Controller
         $userId = $request->user()->id;
         $today = now()->startOfDay();
         $month = now()->startOfMonth();
+        $nextMonth = now()->startOfMonth()->addMonthNoOverflow();
 
         return Inertia::render('dashboard', [
             'metrics' => [
                 'dailySales' => Sale::where('user_id', $userId)->where('sold_at', '>=', $today)->sum('total_amount'),
                 'monthlySales' => Sale::where('user_id', $userId)->where('sold_at', '>=', $month)->sum('total_amount'),
-                'stockUnits' => InventoryProduct::where('user_id', $userId)->sum('stock_quantity'),
+                'nextMonthBills' => LoanInstallment::query()
+                    ->whereHas('loanApplication', fn ($query) => $query
+                        ->where('user_id', $userId)
+                        ->whereIn('status', ['simulation_active', 'completed']))
+                    ->where('status', '!=', 'paid')
+                    ->whereBetween('due_date', [$nextMonth->toDateString(), $nextMonth->copy()->endOfMonth()->toDateString()])
+                    ->sum('amount'),
                 'productCount' => InventoryProduct::where('user_id', $userId)->count(),
             ],
             'registeredEvents' => EventRegistration::query()

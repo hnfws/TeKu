@@ -443,6 +443,55 @@ test('users can pay a future month installment early', function () {
     expect(LoanPayment::query()->where('loan_installment_id', $installment->id)->firstOrFail()->status)->toBe('pending');
 });
 
+test('dashboard shows the current users unpaid installments due next month', function () {
+    $user = User::factory()->create();
+    $account = BankAccount::create([
+        'user_id' => $user->id,
+        'account_holder' => 'Test User',
+        'account_number' => '123456789',
+        'bank_name' => 'BCA',
+    ]);
+    $loan = LoanApplication::create([
+        'user_id' => $user->id,
+        'bank_account_id' => $account->id,
+        'principal' => 500_000,
+        'term_months' => 3,
+        'monthly_interest_rate' => 2,
+        'total_interest' => 30_000,
+        'total_repayment' => 530_000,
+        'status' => 'simulation_active',
+    ]);
+    LoanInstallment::create([
+        'loan_application_id' => $loan->id,
+        'installment_number' => 1,
+        'due_date' => now()->startOfMonth()->addMonthNoOverflow()->addDays(3)->toDateString(),
+        'amount' => 125_000,
+        'status' => 'pending',
+    ]);
+    LoanInstallment::create([
+        'loan_application_id' => $loan->id,
+        'installment_number' => 2,
+        'due_date' => now()->startOfMonth()->addMonthNoOverflow()->addDays(8)->toDateString(),
+        'amount' => 175_000,
+        'status' => 'paid',
+        'paid_at' => now(),
+    ]);
+    LoanInstallment::create([
+        'loan_application_id' => $loan->id,
+        'installment_number' => 3,
+        'due_date' => now()->startOfMonth()->addMonthsNoOverflow(2)->addDays(3)->toDateString(),
+        'amount' => 250_000,
+        'status' => 'pending',
+    ]);
+
+    $this->actingAs($user)->get('/dashboard')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('dashboard')
+            ->where('metrics.nextMonthBills', 125_000)
+            ->missing('metrics.stockUnits'));
+});
+
 test('Midtrans notifications require a valid sandbox signature and settle an installment idempotently', function () {
     config()->set('services.midtrans.server_key', 'SB-Mid-server-test-key');
 
