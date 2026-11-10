@@ -4,6 +4,7 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
+        <link rel="icon" type="image/png" href="{{ asset('teku-favicon.png') }}?v=2">
 
         <title inertia>{{ config('app.name', 'Laravel') }}</title>
 
