@@ -18,7 +18,7 @@ type CalendarEvent = { id: number; title: string; start_date: string | null };
 interface EventsDashboardProps {
     tenantRegistrations: { data: TenantRegistration[]; links: { url: string | null; label: string; active: boolean }[] };
     calendarEvents: CalendarEvent[];
-    events: { data: EventItem[]; links: { url: string | null; label: string; active: boolean }[]; total: number };
+    events: { data: EventItem[]; total: number };
     filters: { category?: string };
     categories: string[];
 }
@@ -205,18 +205,6 @@ export default function EventsDashboard({ tenantRegistrations, calendarEvents, e
                             </p>
                         )}
                     </div>
-                    <nav aria-label="Halaman rekomendasi event" className="flex justify-end gap-1">
-                        {events.links.map((link, index) =>
-                            link.url ? (
-                                <Link
-                                    className="rounded-md bg-white px-3 py-1.5 text-xs text-stone-600 hover:bg-stone-100"
-                                    href={link.url}
-                                    key={`${link.label}-${index}`}
-                                    dangerouslySetInnerHTML={{ __html: link.label }}
-                                />
-                            ) : null,
-                        )}
-                    </nav>
                 </section>
             </div>
         </ManagementLayout>

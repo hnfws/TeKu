@@ -271,6 +271,26 @@ test('event lists show nearest upcoming dates before later ones', function () {
         ->where('events.data.1.id', $laterEvent->id));
 });
 
+test('event dashboard previews four events without pagination links', function () {
+    $user = User::factory()->create();
+    $events = collect(range(1, 6))->map(fn (int $day) => Event::create([
+        'title' => "Event {$day}",
+        'category' => 'bazaar',
+        'location_name' => 'Jakarta',
+        'start_date' => now()->startOfDay()->addDays($day),
+        'end_date' => now()->startOfDay()->addDays($day)->addHours(4),
+        'latitude' => -6.2,
+        'longitude' => 106.8,
+    ]));
+
+    $this->actingAs($user)->get('/event-dashboard')->assertInertia(fn ($page) => $page
+        ->component('events/dashboard')
+        ->has('events.data', 4)
+        ->where('events.total', 6)
+        ->where('events.data.0.id', $events[0]->id)
+        ->missing('events.links'));
+});
+
 test('calendar shows dated events for the requested month with tenant registration status', function () {
     $user = User::factory()->create();
     $month = now()->addMonth()->startOfMonth();

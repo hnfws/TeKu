@@ -79,6 +79,14 @@ class EventController extends Controller
     {
         $userId = $request->user()->id;
         $now = now();
+        $eventsQuery = Event::query()
+            ->when($request->filled('category'), fn ($query) => $query->where('category', $request->query('category')))
+            ->orderByRaw('CASE WHEN start_date IS NULL THEN 2 WHEN start_date >= ? THEN 0 ELSE 1 END', [$now])
+            ->orderByRaw('CASE WHEN start_date >= ? THEN start_date END ASC', [$now])
+            ->orderByRaw('CASE WHEN start_date < ? THEN start_date END DESC', [$now])
+            ->orderByDesc('id');
+        $eventCount = (clone $eventsQuery)->count();
+        $eventPreview = (clone $eventsQuery)->limit(4)->get();
 
         return Inertia::render('events/dashboard', [
             'tenantRegistrations' => TenantRegistration::query()
@@ -107,14 +115,10 @@ class EventController extends Controller
                     'start_date' => Carbon::parse($event->start_date)->toDateString(),
                 ])
                 ->values(),
-            'events' => Event::query()
-                ->when($request->filled('category'), fn ($query) => $query->where('category', $request->query('category')))
-                ->orderByRaw('CASE WHEN start_date IS NULL THEN 2 WHEN start_date >= ? THEN 0 ELSE 1 END', [$now])
-                ->orderByRaw('CASE WHEN start_date >= ? THEN start_date END ASC', [$now])
-                ->orderByRaw('CASE WHEN start_date < ? THEN start_date END DESC', [$now])
-                ->orderByDesc('id')
-                ->paginate(8)
-                ->withQueryString(),
+            'events' => [
+                'data' => $eventPreview,
+                'total' => $eventCount,
+            ],
             'filters' => $request->only(['category']),
             'categories' => Event::query()->whereNotNull('category')->distinct()->orderBy('category')->pluck('category'),
         ]);
