@@ -2,6 +2,7 @@ import { Link, useForm, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 
 import ManagementLayout from '@/layouts/management-layout';
+import { eventCategoryLabel } from '@/lib/event-category';
 
 type EventItem = {
     id: number;
@@ -74,7 +75,7 @@ export default function EventShow({ event, tenantVouchers, tenantPaymentMethods,
                             <i className="fa-solid fa-arrow-left mr-2" />
                             Kembali ke daftar event
                         </Link>
-                        <p className="mt-3 text-xs font-semibold tracking-wide text-[#688463] uppercase">{event.category || 'Event'}</p>
+                        <p className="mt-3 text-xs font-semibold tracking-wide text-[#688463] uppercase">{eventCategoryLabel(event.category)}</p>
                         <h1 className="mt-1 text-3xl font-bold tracking-tight text-stone-900">{event.title}</h1>
                     </div>
                 </header>

@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Event;
 use App\Models\Tenant;
+use App\Support\EventCategory;
 use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -37,6 +38,9 @@ class ProcessScrapedEvent implements ShouldBeUnique, ShouldQueue
         return DB::transaction(function (): string {
             $accountName = strtolower($this->payload['account_name']);
             $caption = mb_strtolower($this->payload['description'] ?? '');
+            $category = $this->payload['category'] ?? EventCategory::infer(
+                ($this->payload['title'] ?? '').' '.($this->payload['description'] ?? '')
+            );
             $priorityKeywords = config('services.scraper.priority_keywords', []);
             $priorityAccounts = config('services.scraper.priority_accounts', []);
             $keywordPriority = collect($priorityKeywords)->contains(
@@ -53,7 +57,7 @@ class ProcessScrapedEvent implements ShouldBeUnique, ShouldQueue
 
             $event->fill([
                 'title' => $this->payload['title'],
-                'category' => 'bazaar',
+                'category' => $category ?? $event->category ?? 'bazaar',
                 'location_name' => $this->payload['location_name'] ?? $event->location_name ?? 'Lokasi Perlu Validasi',
                 'start_date' => isset($this->payload['start_date'])
                     ? $this->eventDate($this->payload['start_date'])

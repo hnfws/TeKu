@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Jobs\ProcessScrapedEvent;
+use App\Support\EventCategory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class ScraperController extends Controller
 {
@@ -14,6 +16,7 @@ class ScraperController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'title' => 'required|string|max:255',
+            'category' => ['nullable', 'string', Rule::in(EventCategory::values())],
             'description' => 'nullable|string',
             'location_name' => 'nullable|string|max:255',
             'latitude' => 'required|numeric',

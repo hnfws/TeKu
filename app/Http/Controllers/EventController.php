@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Event;
 use App\Models\Tenant;
 use App\Models\TenantRegistration;
+use App\Support\EventCategory;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -68,7 +69,7 @@ class EventController extends Controller
         return Inertia::render('events/index', [
             'events' => $events,
             'filters' => $request->only(['search', 'category']),
-            'categories' => Event::query()->whereNotNull('category')->distinct()->orderBy('category')->pluck('category'),
+            'categories' => EventCategory::values(),
             'registeredTenantIds' => TenantRegistration::query()
                 ->where('user_id', $request->user()->id)
                 ->pluck('tenant_id'),
@@ -120,7 +121,7 @@ class EventController extends Controller
                 'total' => $eventCount,
             ],
             'filters' => $request->only(['category']),
-            'categories' => Event::query()->whereNotNull('category')->distinct()->orderBy('category')->pluck('category'),
+            'categories' => EventCategory::values(),
         ]);
     }
 
