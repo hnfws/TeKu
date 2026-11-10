@@ -68,6 +68,12 @@ test('users can update inventory through a multipart form with an image', functi
     expect($product->fresh()->name)->toBe('Nama Baru')
         ->and($product->fresh()->stock_quantity)->toBe(8)
         ->and($product->fresh()->image_path)->not->toBeNull();
+
+    $imageUrl = Storage::disk('public')->url($product->fresh()->image_path);
+    $this->actingAs($user)->get('/inventory')
+        ->assertInertia(fn ($page) => $page
+            ->component('inventory/index')
+            ->where('products.data.0.image_url', $imageUrl));
 });
 
 test('inventory edit provides production and expiration dates in date input format', function () {

@@ -10,6 +10,7 @@ type Product = {
     unit: string;
     selling_price: number | string;
     image_path: string | null;
+    image_url: string | null;
 };
 type CheckoutPayload = {
     items: { product_id: number; quantity: number }[];
@@ -261,7 +262,7 @@ export default function Pos({ products, promotionsAvailable }: PosProps) {
                                                 <img
                                                     alt={product.name}
                                                     className="h-full w-full rounded object-cover"
-                                                    src={`/storage/${product.image_path}`}
+                                                    src={product.image_url ?? ''}
                                                 />
                                             ) : (
                                                 <div className="flex h-full flex-col items-center justify-center gap-2 text-[#879281]">
@@ -345,7 +346,7 @@ export default function Pos({ products, promotionsAvailable }: PosProps) {
                                 <div className="flex gap-3">
                                     <div className="h-16 w-20 shrink-0 overflow-hidden rounded-md border border-neutral-300 bg-[#e5ded2]">
                                         {product.image_path ? (
-                                            <img alt="" className="h-full w-full object-cover" src={`/storage/${product.image_path}`} />
+                                            <img alt="" className="h-full w-full object-cover" src={product.image_url ?? ''} />
                                         ) : (
                                             <div className="flex h-full items-center justify-center text-[#879281]">
                                                 <i className="fa-solid fa-utensils" />

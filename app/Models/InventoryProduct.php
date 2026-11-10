@@ -5,9 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 
 class InventoryProduct extends Model
 {
+    protected $appends = ['image_url'];
+
     protected $fillable = [
         'user_id',
         'name',
@@ -34,6 +37,13 @@ class InventoryProduct extends Model
             'production_date' => 'date',
             'expiration_date' => 'date',
         ];
+    }
+
+    public function getImageUrlAttribute(): ?string
+    {
+        return $this->image_path
+            ? Storage::disk('public')->url($this->image_path)
+            : null;
     }
 
     public function user(): BelongsTo
