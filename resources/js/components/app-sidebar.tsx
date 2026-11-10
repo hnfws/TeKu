@@ -5,7 +5,6 @@ import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, Sid
 import { type NavItem } from '@/types';
 import { Link } from '@inertiajs/react';
 import { BookOpen, Folder, LayoutGrid } from 'lucide-react';
-import AppLogo from './app-logo';
 
 const mainNavItems: NavItem[] = [
     {
@@ -36,7 +35,11 @@ export function AppSidebar() {
                     <SidebarMenuItem>
                         <SidebarMenuButton size="lg" asChild>
                             <Link href="/dashboard" prefetch>
-                                <AppLogo />
+                                <img
+                                    src="/assets/teku-sidebar-logo.png"
+                                    alt="TeKu"
+                                    className="h-10 w-auto shrink-0 object-contain group-data-[collapsible=icon]:size-8"
+                                />
                             </Link>
                         </SidebarMenuButton>
                     </SidebarMenuItem>

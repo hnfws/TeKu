@@ -37,8 +37,12 @@ export default function ManagementSidebar({ className = '', onNavigate }: Manage
                         <i className="fa-solid fa-bars text-lg" />
                     </button>
                     {!collapsed && (
-                        <div className="flex h-12 flex-1 items-center justify-center rounded-lg bg-[#f8f6f0] text-sm font-medium tracking-wide text-gray-800 shadow-sm">
-                            Logo
+                        <div className="flex h-20 flex-1 items-center justify-center">
+                            <img
+                                src="/assets/teku-sidebar-logo.png"
+                                alt="TeKu"
+                                className="h-full w-full -translate-x-1 object-contain"
+                            />
                         </div>
                     )}
                 </div>

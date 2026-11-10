@@ -27,11 +27,7 @@ export default function Register() {
             <main className="w-full max-w-[440px] flex flex-col items-center mx-auto" data-purpose="register-container">
                 {/* Logo Section */}
                 <section aria-label="Logo Brand" className="w-full mb-8 flex justify-center">
-                    <div className="w-full max-w-[390px] h-[190px] bg-[#D8DBDF] rounded-sm flex items-center justify-center select-none shadow-sm">
-                        <span className="text-3xl sm:text-4xl font-extrabold tracking-tight text-black">
-                            Logo
-                        </span>
-                    </div>
+                    <img src="/assets/teku-auth-logo.png" alt="TeKu" className="h-[190px] w-full max-w-[390px] object-contain" />
                 </section>
 
                 {/* Form Section */}

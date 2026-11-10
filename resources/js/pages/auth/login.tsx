@@ -39,11 +39,7 @@ export default function Login({ status, canResetPassword = true }: LoginProps) {
             <main className="w-full max-w-[440px] flex flex-col items-center mx-auto" data-purpose="login-container">
                 {/* BEGIN: LogoSection */}
                 <section aria-label="Logo Brand" className="w-full mb-8 flex justify-center">
-                    <div className="w-full max-w-[390px] h-[190px] bg-[#D8DBDF] rounded-sm flex items-center justify-center select-none shadow-sm" data-purpose="logo-placeholder">
-                        <span className="text-3xl sm:text-4xl font-extrabold tracking-tight text-black">
-                            Logo
-                        </span>
-                    </div>
+                    <img src="/assets/teku-auth-logo.png" alt="TeKu" className="h-[190px] w-full max-w-[390px] object-contain" />
                 </section>
                 {/* END: LogoSection */}
 
