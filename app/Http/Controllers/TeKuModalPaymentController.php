@@ -93,6 +93,9 @@ class TeKuModalPaymentController extends Controller
     ): Response {
         $payment->load('installment.loanApplication');
         abort_unless($payment->installment->loanApplication->user_id === $request->user()->id, 404);
+        if ($request->boolean('from_checkout')) {
+            $request->session()->put('tekumodal.payment_animation.'.$payment->id, true);
+        }
         $statusCheckError = false;
 
         if ($payment->status === 'pending') {

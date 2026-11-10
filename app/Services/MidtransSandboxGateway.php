@@ -59,7 +59,10 @@ class MidtransSandboxGateway
             ],
             'enabled_payments' => [$enabledPayment],
             'callbacks' => [
-                'finish' => URL::route('tekumodal.payments.return', $payment),
+                'finish' => URL::route('tekumodal.payments.return', [
+                    'payment' => $payment->id,
+                    'from_checkout' => 1,
+                ]),
             ],
             'expiry' => [
                 'unit' => 'hour',

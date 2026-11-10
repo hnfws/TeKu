@@ -17,7 +17,7 @@ interface BankAccount {
     bank_name: string;
 }
 
-interface BankAccountsProps {
+interface BankAccountsProps extends Record<string, unknown> {
     bankAccounts: BankAccount[];
     banks: string[];
     errors: Record<string, string>;

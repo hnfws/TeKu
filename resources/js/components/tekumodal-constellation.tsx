@@ -65,6 +65,7 @@ export default function TeKuModalConstellation({ xp, animateFromXp, animationDel
         let shakeTime = 0;
         let frameId = 0;
         let delayTimer: number | undefined;
+        let nextStepTimer: number | undefined;
         const particles: {
             x: number;
             y: number;
@@ -340,7 +341,11 @@ export default function TeKuModalConstellation({ xp, animateFromXp, animationDel
                     triggerExplosion(targetPos.x, targetPos.y);
                     setCompletedSteps(completedLines.length);
                     currentStepIndex++;
-                    if (currentStepIndex < earnedSteps) animating = true;
+                    if (currentStepIndex < earnedSteps) {
+                        nextStepTimer = window.setTimeout(() => {
+                            animating = true;
+                        }, 650);
+                    }
                 }
             }
 
@@ -365,6 +370,7 @@ export default function TeKuModalConstellation({ xp, animateFromXp, animationDel
             resizeObserver.disconnect();
             window.cancelAnimationFrame(frameId);
             if (delayTimer !== undefined) window.clearTimeout(delayTimer);
+            if (nextStepTimer !== undefined) window.clearTimeout(nextStepTimer);
         };
     }, [animateFromXp, animationDelayMs, earnedSteps, initialSteps]);
 

@@ -309,8 +309,7 @@ test('payment result includes the correct billing and gamification summary', fun
     ]);
 
     $this->actingAs($user)
-        ->withSession(["tekumodal.payment_animation.{$payment->id}" => true])
-        ->get("/tekumodal/payments/{$payment->id}/return")
+        ->get("/tekumodal/payments/{$payment->id}/return?from_checkout=1")
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('tekumodal/payment-result')
