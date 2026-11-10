@@ -35,13 +35,11 @@ export default function ForgotPassword({ status, otpSent }: { status?: string; o
 
             {/* BEGIN: ForgotPasswordCard */}
             <main className="-mt-16 flex w-full max-w-[440px] flex-col items-center sm:-mt-20" data-purpose="auth-container">
-                {/* Logo placeholder block */}
-                <div
-                    className="mb-10 flex h-48 w-full items-center justify-center bg-[#D8D8D8] shadow-sm select-none sm:h-52"
-                    data-purpose="logo-placeholder"
-                >
-                    <span className="text-3xl font-bold tracking-tight text-black sm:text-4xl">Logo</span>
-                </div>
+                <img
+                    src="/assets/teku-auth-logo.png"
+                    alt="TeKu"
+                    className="mb-10 h-48 w-full object-contain sm:h-52"
+                />
 
                 {/* BEGIN: VerificationForm */}
                 <form className="flex w-full flex-col" data-purpose="verification-form" onSubmit={submit}>
