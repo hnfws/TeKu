@@ -22,7 +22,8 @@ export default function BrowserReminders({ enabled, publicKey }: BrowserReminder
         setSupported(available);
         if (!available) return;
 
-        navigator.serviceWorker.getRegistration('/service-worker.js')
+        navigator.serviceWorker
+            .getRegistration('/service-worker.js')
             .then((registration) => registration?.pushManager.getSubscription())
             .then((subscription) => setActive(Boolean(subscription)))
             .catch(() => setMessage('Status pengingat browser tidak dapat dimuat.'));
@@ -36,8 +37,8 @@ export default function BrowserReminders({ enabled, publicKey }: BrowserReminder
             const registration = active
                 ? await navigator.serviceWorker.getRegistration('/service-worker.js')
                 : enabled && publicKey
-                    ? await navigator.serviceWorker.register('/service-worker.js')
-                    : null;
+                  ? await navigator.serviceWorker.register('/service-worker.js')
+                  : null;
             if (!registration) throw new Error('Notifikasi browser belum dikonfigurasi oleh server.');
             const current = await registration.pushManager.getSubscription();
             const csrfToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content;
@@ -75,7 +76,7 @@ export default function BrowserReminders({ enabled, publicKey }: BrowserReminder
             }
 
             setActive(true);
-            setMessage('Pengingat browser aktif. Anda akan diberi notifikasi 24 jam sebelum event terdaftar.');
+            setMessage('Pengingat browser aktif. Anda akan diberi notifikasi 24 jam sebelum jadwal tenant terdaftar.');
         } catch (error) {
             setMessage(error instanceof Error ? error.message : 'Pengaturan pengingat browser gagal.');
         } finally {
@@ -87,10 +88,21 @@ export default function BrowserReminders({ enabled, publicKey }: BrowserReminder
         <section className="flex flex-col gap-3 rounded-xl border border-stone-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <h2 className="text-sm font-bold text-stone-900">Pengingat browser</h2>
-                <p className="mt-1 text-xs leading-5 text-stone-500">Notifikasi dikirim 24 jam sebelum event yang Anda daftarkan. Browser perlu mengizinkan notifikasi.</p>
-                {message && <p className="mt-2 text-xs text-stone-600" role="status">{message}</p>}
+                <p className="mt-1 text-xs leading-5 text-stone-500">
+                    Notifikasi dikirim 24 jam sebelum event tenant yang sudah Anda tandai terdaftar. Browser perlu mengizinkan notifikasi.
+                </p>
+                {message && (
+                    <p className="mt-2 text-xs text-stone-600" role="status">
+                        {message}
+                    </p>
+                )}
             </div>
-            <button className="shrink-0 rounded-lg bg-[#3e5638] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#33472e] disabled:cursor-not-allowed disabled:opacity-50" disabled={busy || !supported || (!enabled && !active)} onClick={toggle} type="button">
+            <button
+                className="shrink-0 rounded-lg bg-[#3e5638] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#33472e] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={busy || !supported || (!enabled && !active)}
+                onClick={toggle}
+                type="button"
+            >
                 {busy ? 'Menyimpan...' : active ? 'Nonaktifkan' : 'Aktifkan notifikasi'}
             </button>
         </section>

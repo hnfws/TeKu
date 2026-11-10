@@ -2,28 +2,27 @@
 
 namespace App\Console\Commands;
 
-use App\Mail\EventReminderMail;
-use App\Models\EventRegistration;
+use App\Mail\TenantReminderMail;
 use App\Models\PushSubscription;
+use App\Models\TenantRegistration;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Minishlink\WebPush\Subscription;
 use Minishlink\WebPush\WebPush;
 
-class SendEventReminders extends Command
+class SendTenantReminders extends Command
 {
-    protected $signature = 'events:send-reminders';
+    protected $signature = 'tenants:send-reminders';
 
-    protected $description = 'Send email and browser reminders 24 hours before registered events';
+    protected $description = 'Send email and browser reminders 24 hours before registered tenant events';
 
     public function handle(): int
     {
         $now = now();
-        $registrations = EventRegistration::query()
-            ->with(['event', 'user'])
-            ->where('status', 'registered')
-            ->whereHas('event', fn ($query) => $query
+        $registrations = TenantRegistration::query()
+            ->with(['tenant.event', 'user'])
+            ->whereHas('tenant.event', fn ($query) => $query
                 ->whereNotNull('start_date')
                 ->where('start_date', '>', $now)
                 ->where('start_date', '<=', $now->copy()->addHours(24)))
@@ -42,7 +41,7 @@ class SendEventReminders extends Command
         return self::SUCCESS;
     }
 
-    private function sendEmailReminder(EventRegistration $registration): void
+    private function sendEmailReminder(TenantRegistration $registration): void
     {
         $mailer = config('mail.mailers.'.config('mail.default').'.transport');
         if (in_array($mailer, ['log', 'array'], true)) {
@@ -51,12 +50,12 @@ class SendEventReminders extends Command
             return;
         }
 
-        Mail::to($registration->user->email)->send(new EventReminderMail($registration->event));
+        Mail::to($registration->user->email)->send(new TenantReminderMail($registration->tenant->event));
         $registration->forceFill(['email_reminded_at' => now()])->save();
-        $this->info("Email reminder sent for registration {$registration->id}.");
+        $this->info("Email reminder sent for tenant registration {$registration->id}.");
     }
 
-    private function sendBrowserReminder(EventRegistration $registration): void
+    private function sendBrowserReminder(TenantRegistration $registration): void
     {
         $vapid = [
             'subject' => config('services.webpush.subject'),
@@ -75,11 +74,12 @@ class SendEventReminders extends Command
             return;
         }
 
+        $event = $registration->tenant->event;
         $push = new WebPush(['VAPID' => $vapid]);
         $payload = json_encode([
-            'title' => 'Pengingat event',
-            'body' => $registration->event->title.' dimulai dalam 24 jam.',
-            'url' => url('/events/'.$registration->event_id),
+            'title' => 'Pengingat jadwal tenant',
+            'body' => $event->title.' dimulai dalam 24 jam.',
+            'url' => url('/events/'.$event->id),
         ], JSON_THROW_ON_ERROR);
         $sent = false;
 
@@ -93,15 +93,17 @@ class SendEventReminders extends Command
 
             if ($report->isSuccess()) {
                 $sent = true;
+
                 continue;
             }
 
             if ($report->isSubscriptionExpired()) {
                 $storedSubscription->delete();
+
                 continue;
             }
 
-            Log::warning('Event browser reminder delivery failed.', [
+            Log::warning('Tenant browser reminder delivery failed.', [
                 'registration_id' => $registration->id,
                 'subscription_id' => $storedSubscription->id,
                 'reason' => $report->getReason(),
@@ -110,7 +112,7 @@ class SendEventReminders extends Command
 
         if ($sent) {
             $registration->forceFill(['browser_reminded_at' => now()])->save();
-            $this->info("Browser reminder sent for registration {$registration->id}.");
+            $this->info("Browser reminder sent for tenant registration {$registration->id}.");
         }
     }
 }

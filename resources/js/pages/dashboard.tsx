@@ -12,11 +12,11 @@ type EventItem = {
     image_url?: string | null;
     organizer_name?: string | null;
 };
-type EventReminder = {
+type TenantRegistration = {
     id: number;
-    title: string;
-    start_date: string;
-    location_name: string | null;
+    tenant_id: number;
+    tenant_type: string | null;
+    event: EventItem | null;
 };
 
 type Product = {
@@ -32,9 +32,12 @@ type Product = {
 
 interface DashboardProps {
     metrics: { dailySales: number; monthlySales: number; nextMonthBills: number; productCount: number };
-    registeredEvents: EventItem[];
+    tenantRegistrations: TenantRegistration[];
     calendarEvents: { id: number; title: string; start_date: string | null }[];
-    upcomingEventReminders: EventReminder[];
+    upcomingTenantBookings: {
+        id: number;
+        event: { id: number; title: string; location_name: string | null; start_date: string } | null;
+    }[];
     products: Product[];
 }
 
@@ -44,7 +47,7 @@ const money = (value: number | string) =>
 const eventDate = (value: string | null) =>
     value ? new Date(value).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : 'Jadwal belum tersedia';
 
-export default function Dashboard({ metrics, registeredEvents, calendarEvents, upcomingEventReminders, products }: DashboardProps) {
+export default function Dashboard({ metrics, tenantRegistrations, calendarEvents, upcomingTenantBookings, products }: DashboardProps) {
     const [search, setSearch] = useState('');
     const [category, setCategory] = useState('');
     const [status, setStatus] = useState('');
@@ -104,45 +107,53 @@ export default function Dashboard({ metrics, registeredEvents, calendarEvents, u
                     <section className="space-y-4 xl:col-span-8">
                         <div className="flex items-center justify-between">
                             <div>
-                                <h2 className="text-lg font-bold text-stone-900">Event Terdaftar</h2>
-                                <p className="text-sm text-stone-500">Event yang sudah Anda daftarkan</p>
+                                <h2 className="text-lg font-bold text-stone-900">Pendaftaran Tenant Saya</h2>
+                                <p className="text-sm text-stone-500">Tenant yang sudah kamu tandai telah didaftarkan</p>
                             </div>
                             <Link className="text-sm font-semibold text-[#52704d] hover:underline" href="/event-dashboard">
                                 Semua event
                             </Link>
                         </div>
-                        {registeredEvents.length ? (
-                            registeredEvents.map((event) => (
-                                <Link
-                                    key={event.id}
-                                    className="flex flex-col gap-4 rounded-xl border border-stone-100 bg-white p-4 shadow-sm transition hover:shadow-md sm:flex-row sm:items-center"
-                                    href={`/events/${event.id}`}
-                                >
-                                    <div className="h-24 w-full shrink-0 overflow-hidden rounded-lg bg-stone-100 sm:w-32">
-                                        {event.image_url && <img alt="" className="h-full w-full object-cover" src={event.image_url} />}
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <h3 className="font-bold text-stone-900">{event.title}</h3>
-                                        <p className="mt-2 text-xs text-stone-500">
-                                            <i className="fa-regular fa-calendar mr-2" />
-                                            {eventDate(event.start_date)}
-                                        </p>
-                                        <p className="mt-1 text-xs text-stone-500">
-                                            <i className="fa-solid fa-location-dot mr-2" />
-                                            {event.location_name || 'Lokasi belum tersedia'}
-                                        </p>
-                                        <p className="mt-2 text-xs text-stone-400">Oleh {event.organizer_name || 'Penyelenggara event'}</p>
-                                    </div>
-                                    <span className="rounded-md bg-emerald-600 px-4 py-2 text-center text-xs font-semibold text-white">
-                                        Terdaftar
-                                    </span>
-                                </Link>
-                            ))
+                        {tenantRegistrations.length ? (
+                            tenantRegistrations
+                                .filter((registration) => registration.event)
+                                .map(
+                                    ({ id, event, tenant_type: tenantType }) =>
+                                        event && (
+                                            <Link
+                                                key={id}
+                                                className="flex flex-col gap-4 rounded-xl border border-stone-100 bg-white p-4 shadow-sm transition hover:shadow-md sm:flex-row sm:items-center"
+                                                href={`/events/${event.id}`}
+                                            >
+                                                <div className="h-24 w-full shrink-0 overflow-hidden rounded-lg bg-stone-100 sm:w-32">
+                                                    {event.image_url && <img alt="" className="h-full w-full object-cover" src={event.image_url} />}
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <h3 className="font-bold text-stone-900">{event.title}</h3>
+                                                    <p className="mt-2 text-xs text-stone-500">
+                                                        <i className="fa-regular fa-calendar mr-2" />
+                                                        {eventDate(event.start_date)}
+                                                    </p>
+                                                    <p className="mt-1 text-xs text-stone-500">
+                                                        <i className="fa-solid fa-location-dot mr-2" />
+                                                        {event.location_name || 'Lokasi belum tersedia'}
+                                                    </p>
+                                                    <p className="mt-2 text-xs text-stone-400">
+                                                        Oleh {event.organizer_name || 'Penyelenggara event'} ·{' '}
+                                                        {tenantType === 'curated_call' ? 'Pendaftaran tenant' : 'Sewa tenant'}
+                                                    </p>
+                                                </div>
+                                                <span className="rounded-md bg-emerald-600 px-4 py-2 text-center text-xs font-semibold text-white">
+                                                    Terdaftar
+                                                </span>
+                                            </Link>
+                                        ),
+                                )
                         ) : (
                             <div className="rounded-xl border border-dashed border-stone-300 bg-white p-8 text-center">
-                                <p className="font-semibold text-stone-700">Belum ada event terdaftar</p>
+                                <p className="font-semibold text-stone-700">Belum ada pendaftaran tenant</p>
                                 <Link className="mt-2 inline-block text-sm font-semibold text-[#52704d] hover:underline" href="/events">
-                                    Jelajahi event
+                                    Cari peluang tenant
                                 </Link>
                             </div>
                         )}
@@ -150,41 +161,45 @@ export default function Dashboard({ metrics, registeredEvents, calendarEvents, u
 
                     <div className="space-y-4 xl:col-span-4">
                         <DashboardCalendar events={calendarEvents} />
-                        <section aria-label="Pengingat jadwal event" className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <h2 className="font-bold text-gray-900">Pengingat terjadwal</h2>
-                                    <p className="mt-1 text-xs text-gray-500">Jadwal event yang akan datang</p>
+                        <section aria-label="Pengingat booking tenant" className="rounded-2xl border border-stone-100 bg-white p-4 shadow-sm">
+                            {upcomingTenantBookings.length ? (
+                                <div className="mt-4 space-y-2.5">
+                                    {upcomingTenantBookings.map(({ id, event }) =>
+                                        event ? (
+                                            <Link
+                                                className="flex items-center gap-3 rounded-xl border border-stone-100 bg-stone-50/70 p-3 transition hover:border-emerald-200 hover:bg-emerald-50/60"
+                                                href={`/events/${event.id}`}
+                                                key={id}
+                                            >
+                                                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-emerald-700 shadow-sm">
+                                                    <i aria-hidden="true" className="fa-solid fa-calendar-check" />
+                                                </span>
+                                                <span className="min-w-0 flex-1">
+                                                    <span className="block truncate text-sm font-semibold text-stone-900">{event.title}</span>
+                                                    <span className="mt-1 block text-xs leading-5 text-stone-500">
+                                                        Booking tenant ·{' '}
+                                                        {new Date(event.start_date).toLocaleString('id-ID', {
+                                                            weekday: 'short',
+                                                            day: 'numeric',
+                                                            month: 'short',
+                                                            hour: '2-digit',
+                                                            minute: '2-digit',
+                                                        })}
+                                                    </span>
+                                                    {event.location_name && (
+                                                        <span className="mt-0.5 block truncate text-xs text-stone-500">{event.location_name}</span>
+                                                    )}
+                                                </span>
+                                                <i aria-hidden="true" className="fa-solid fa-chevron-right text-xs text-stone-400" />
+                                            </Link>
+                                        ) : null,
+                                    )}
                                 </div>
-                                <i aria-hidden="true" className="fa-regular fa-bell text-lg text-[#688463]" />
-                            </div>
-                            <div className="mt-4 space-y-3">
-                                {upcomingEventReminders.map((event) => (
-                                    <Link
-                                        className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50/70 p-3 transition hover:bg-gray-100"
-                                        href={`/events/${event.id}`}
-                                        key={event.id}
-                                    >
-                                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#edf1e9] text-[#52704d]">
-                                            <i aria-hidden="true" className="fa-regular fa-user" />
-                                        </span>
-                                        <span className="min-w-0">
-                                            <span className="block truncate text-xs font-bold text-gray-800">{event.title}</span>
-                                            <span className="mt-1 block text-[11px] text-gray-500">
-                                                {new Date(event.start_date).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}
-                                            </span>
-                                            {event.location_name && (
-                                                <span className="block truncate text-[11px] text-gray-400">{event.location_name}</span>
-                                            )}
-                                        </span>
-                                    </Link>
-                                ))}
-                                {!upcomingEventReminders.length && (
-                                    <p className="rounded-xl bg-gray-50 p-3 text-xs text-gray-500">
-                                        Belum ada jadwal event terdaftar yang akan datang.
-                                    </p>
-                                )}
-                            </div>
+                            ) : (
+                                <p className="mt-4 rounded-xl bg-stone-50 px-3 py-4 text-center text-xs text-stone-500">
+                                    Belum ada jadwal booking tenant mendatang.
+                                </p>
+                            )}
                         </section>
                     </div>
                 </div>

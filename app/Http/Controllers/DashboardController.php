@@ -3,10 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Event;
-use App\Models\EventRegistration;
 use App\Models\InventoryProduct;
 use App\Models\LoanInstallment;
 use App\Models\Sale;
+use App\Models\TenantRegistration;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
@@ -34,45 +34,55 @@ class DashboardController extends Controller
                     ->sum('amount'),
                 'productCount' => InventoryProduct::where('user_id', $userId)->count(),
             ],
-            'registeredEvents' => EventRegistration::query()
-                ->with('event')
+            'tenantRegistrations' => TenantRegistration::query()
+                ->with('tenant.event')
                 ->where('user_id', $userId)
-                ->where('status', 'registered')
                 ->latest('registered_at')
                 ->limit(3)
                 ->get()
-                ->pluck('event')
-                ->filter()
+                ->map(fn (TenantRegistration $registration) => [
+                    'id' => $registration->id,
+                    'tenant_id' => $registration->tenant_id,
+                    'tenant_type' => $registration->tenant?->tenant_type,
+                    'event' => $registration->tenant?->event,
+                ])
+                ->filter(fn (array $registration) => $registration['event'] !== null)
                 ->values(),
-            'calendarEvents' => EventRegistration::query()
-                ->with('event:id,title,start_date')
+            'calendarEvents' => TenantRegistration::query()
+                ->with('tenant.event:id,title,start_date')
                 ->where('user_id', $userId)
-                ->where('status', 'registered')
-                ->whereHas('event', fn ($query) => $query->whereBetween('start_date', [now()->startOfMonth(), now()->endOfMonth()]))
+                ->whereHas('tenant.event', fn ($query) => $query->whereBetween('start_date', [now()->startOfMonth(), now()->endOfMonth()]))
                 ->get()
-                ->map(fn (EventRegistration $registration) => $registration->event)
+                ->map(fn (TenantRegistration $registration) => $registration->tenant?->event)
                 ->filter()
+                ->unique('id')
                 ->map(fn (Event $event) => [
                     'id' => $event->id,
                     'title' => $event->title,
                     'start_date' => Carbon::parse($event->start_date)->toDateString(),
                 ])
                 ->values(),
-            'upcomingEventReminders' => Event::query()
-                ->whereHas('registrations', fn ($query) => $query
-                    ->where('user_id', $userId)
-                    ->where('status', 'registered'))
-                ->whereNotNull('start_date')
-                ->where('start_date', '>=', now())
-                ->orderBy('start_date')
-                ->limit(5)
-                ->get(['id', 'title', 'location_name', 'start_date'])
-                ->map(fn (Event $event) => [
-                    'id' => $event->id,
-                    'title' => $event->title,
-                    'location_name' => $event->location_name,
-                    'start_date' => Carbon::parse($event->start_date)->toIso8601String(),
+            'upcomingTenantBookings' => TenantRegistration::query()
+                ->join('event_tenants', 'tenant_registrations.tenant_id', '=', 'event_tenants.id')
+                ->join('events', 'event_tenants.event_id', '=', 'events.id')
+                ->where('tenant_registrations.user_id', $userId)
+                ->whereNotNull('events.start_date')
+                ->where('events.start_date', '>=', now())
+                ->orderBy('events.start_date')
+                ->limit(3)
+                ->with('tenant.event:id,title,location_name,start_date')
+                ->select('tenant_registrations.*')
+                ->get()
+                ->map(fn (TenantRegistration $registration) => [
+                    'id' => $registration->id,
+                    'event' => $registration->tenant?->event ? [
+                        'id' => $registration->tenant->event->id,
+                        'title' => $registration->tenant->event->title,
+                        'location_name' => $registration->tenant->event->location_name,
+                        'start_date' => Carbon::parse($registration->tenant->event->start_date, config('app.timezone'))->toIso8601String(),
+                    ] : null,
                 ])
+                ->filter(fn (array $booking) => $booking['event'] !== null)
                 ->values(),
             'products' => InventoryProduct::query()
                 ->where('user_id', $userId)

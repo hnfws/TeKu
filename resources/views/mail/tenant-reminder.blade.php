@@ -1,6 +1,6 @@
-<h1>Pengingat event</h1>
+<h1>Pengingat jadwal tenant</h1>
 
-<p>Anda terdaftar untuk mengikuti <strong>{{ $event->title }}</strong>.</p>
+<p>Anda sudah menandai pendaftaran tenant untuk event <strong>{{ $event->title }}</strong>.</p>
 
 @if ($eventDate)
     <p>Event dimulai pada {{ $eventDate }} ({{ config('app.timezone') }}).</p>

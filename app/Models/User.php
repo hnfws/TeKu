@@ -71,4 +71,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(TenantBooking::class);
     }
+
+    public function tenantRegistrations(): HasMany
+    {
+        return $this->hasMany(TenantRegistration::class);
+    }
 }

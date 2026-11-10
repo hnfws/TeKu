@@ -3,13 +3,14 @@
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
+use Minishlink\WebPush\VAPID;
 use Symfony\Component\Process\Process;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-Schedule::command('events:send-reminders')->everyMinute()->withoutOverlapping();
+Schedule::command('tenants:send-reminders')->everyMinute()->withoutOverlapping();
 
 Artisan::command('webpush:keys', function () {
     $opensslConfig = getenv('OPENSSL_CONF');
@@ -39,8 +40,8 @@ Artisan::command('webpush:keys', function () {
         return self::SUCCESS;
     }
 
-    $keys = \Minishlink\WebPush\VAPID::createVapidKeys();
+    $keys = VAPID::createVapidKeys();
     $this->line('VAPID_PUBLIC_KEY='.$keys['publicKey']);
     $this->line('VAPID_PRIVATE_KEY='.$keys['privateKey']);
     $this->line('VAPID_SUBJECT=mailto:admin@example.com');
-})->purpose('Generate VAPID keys for browser event reminders');
+})->purpose('Generate VAPID keys for tenant browser reminders');

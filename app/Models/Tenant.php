@@ -24,4 +24,9 @@ class Tenant extends Model
     {
         return $this->hasMany(TenantBooking::class);
     }
+
+    public function registrations(): HasMany
+    {
+        return $this->hasMany(TenantRegistration::class);
+    }
 }

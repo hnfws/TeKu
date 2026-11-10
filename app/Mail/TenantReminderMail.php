@@ -8,8 +8,9 @@ use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Carbon;
 
-class EventReminderMail extends Mailable
+class TenantReminderMail extends Mailable
 {
     use Queueable;
     use SerializesModels;
@@ -18,17 +19,17 @@ class EventReminderMail extends Mailable
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: 'Pengingat event: '.$this->event->title);
+        return new Envelope(subject: 'Pengingat jadwal tenant: '.$this->event->title);
     }
 
     public function content(): Content
     {
         return new Content(
-            view: 'mail.event-reminder',
+            view: 'mail.tenant-reminder',
             with: [
                 'eventUrl' => url('/events/'.$this->event->id),
                 'eventDate' => $this->event->start_date
-                    ? \Illuminate\Support\Carbon::parse($this->event->start_date, config('app.timezone'))->format('d M Y, H:i')
+                    ? Carbon::parse($this->event->start_date, config('app.timezone'))->format('d M Y, H:i')
                     : null,
             ],
         );

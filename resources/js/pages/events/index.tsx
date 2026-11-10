@@ -24,7 +24,7 @@ interface EventsIndexProps {
         total: number;
     };
     filters: { search?: string; category?: string };
-    registeredEventIds: number[];
+    registeredTenantIds: number[];
     categories: string[];
 }
 
@@ -36,7 +36,7 @@ const priceLabel = (price: string | number | null) =>
         ? 'Gratis'
         : new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(price));
 
-export default function EventsIndex({ events, filters, registeredEventIds, categories }: EventsIndexProps) {
+export default function EventsIndex({ events, filters, registeredTenantIds, categories }: EventsIndexProps) {
     return (
         <ManagementLayout title="Daftar Event">
             <div className="mx-auto max-w-[1360px] space-y-6">
@@ -105,7 +105,7 @@ export default function EventsIndex({ events, filters, registeredEventIds, categ
                             </Link>
                         </div>
                         {events.data.map((event) => {
-                            const registered = registeredEventIds.includes(event.id);
+                            const registered = event.tenants.some((tenant) => registeredTenantIds.includes(tenant.id));
                             const tenantPrice = event.tenants.find((tenant) => tenant.price !== null)?.price ?? null;
                             const tenantDeadline = event.tenants.find((tenant) => tenant.deadline_date)?.deadline_date;
                             const isTenantOpportunity = Boolean(event.source_account);
@@ -160,7 +160,7 @@ export default function EventsIndex({ events, filters, registeredEventIds, categ
                                             className={`rounded-md px-4 py-2 text-xs font-semibold transition ${registered ? 'bg-emerald-50 text-emerald-700' : 'bg-[#c8401c] text-white hover:bg-[#b03716]'}`}
                                             href={`/events/${event.id}`}
                                         >
-                                            {registered ? 'Terdaftar' : 'Detail Event'}
+                                            {registered ? 'Terdaftar tenant' : 'Detail Event'}
                                         </Link>
                                     </div>
                                 </article>

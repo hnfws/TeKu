@@ -1,4 +1,5 @@
 import { Link, useForm, usePage } from '@inertiajs/react';
+import { useState } from 'react';
 
 import ManagementLayout from '@/layouts/management-layout';
 
@@ -23,16 +24,17 @@ type EventItem = {
         requirements: string | null;
         registration_link: string | null;
         instagram_post_url: string | null;
+        instagram_profile_url: string | null;
         deadline_date: string | null;
+        is_registered: boolean;
     }[];
 };
 
 interface EventShowProps {
     event: EventItem;
-    isRegistered: boolean;
-    registrationClosed: boolean;
     tenantVouchers: {
         id: number;
+        code: string;
         type: string;
         discount_percentage: number;
         max_discount_amount: number | null;
@@ -57,8 +59,7 @@ const money = (value: number | string | null) =>
         ? 'Gratis'
         : new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value));
 
-export default function EventShow({ event, isRegistered, registrationClosed, tenantVouchers, tenantPaymentMethods, tenantBookings }: EventShowProps) {
-    const form = useForm({});
+export default function EventShow({ event, tenantVouchers, tenantPaymentMethods, tenantBookings }: EventShowProps) {
     const flash = usePage<{ flash?: { success?: string; error?: string } }>().props.flash;
     const coordinates = event.latitude && event.longitude ? `${event.latitude},${event.longitude}` : null;
     const tenantPrice = event.tenants?.find((tenant) => tenant.price !== null)?.price ?? null;
@@ -182,54 +183,22 @@ export default function EventShow({ event, isRegistered, registrationClosed, ten
                                 <p className="mt-1 text-xs text-white/80">
                                     {event.start_date ? dateLabel(event.start_date) : 'Jadwal belum diumumkan'}
                                 </p>
-                                {isRegistered ? (
-                                    <form
-                                        className="mt-5"
-                                        onSubmit={(submitEvent) => {
-                                            submitEvent.preventDefault();
-                                            form.delete(`/events/${event.id}/register`);
-                                        }}
-                                    >
-                                        <p className="rounded-lg bg-white/15 px-4 py-3 text-center text-sm font-semibold">
-                                            <i className="fa-solid fa-circle-check mr-2" />
-                                            Anda sudah terdaftar
-                                        </p>
-                                        <button
-                                            className="mt-3 w-full rounded-full border border-white/70 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-60"
-                                            disabled={form.processing}
-                                            type="submit"
-                                        >
-                                            {form.processing ? 'Membatalkan...' : 'Batalkan pendaftaran'}
-                                        </button>
-                                    </form>
-                                ) : registrationClosed ? (
-                                    <p className="mt-5 rounded-lg bg-white/15 px-4 py-3 text-center text-sm font-semibold">
-                                        <i className="fa-solid fa-clock mr-2" />
-                                        Pendaftaran tenant sudah ditutup
-                                    </p>
+                                {event.tenants?.length ? (
+                                    <div className="mt-5 space-y-3">
+                                        {event.tenants.map((tenant) => (
+                                            <TenantRegistrationAction
+                                                eventId={event.id}
+                                                eventTitle={event.title}
+                                                key={tenant.id}
+                                                tenant={tenant}
+                                                vouchers={tenantVouchers}
+                                            />
+                                        ))}
+                                    </div>
                                 ) : (
-                                    <form
-                                        className="mt-5"
-                                        onSubmit={(submitEvent) => {
-                                            submitEvent.preventDefault();
-                                            form.post(`/events/${event.id}/register`, { onSuccess: () => form.reset() });
-                                        }}
-                                    >
-                                        <button
-                                            className="w-full rounded-full bg-white px-4 py-3 text-sm font-semibold text-stone-900 shadow-sm transition hover:bg-stone-100 disabled:opacity-60"
-                                            disabled={form.processing}
-                                            type="submit"
-                                        >
-                                            {form.processing ? 'Mendaftarkan...' : 'Daftar Event'}
-                                        </button>
-                                        {Object.values(form.errors)
-                                            .filter((error): error is string => typeof error === 'string')
-                                            .map((error) => (
-                                                <p className="mt-2 text-sm text-white" key={error}>
-                                                    {error}
-                                                </p>
-                                            ))}
-                                    </form>
+                                    <p className="mt-5 rounded-lg bg-white/15 px-4 py-3 text-center text-sm">
+                                        Informasi pendaftaran tenant belum tersedia untuk event ini.
+                                    </p>
                                 )}
                             </section>
                             <section className="rounded-2xl border border-stone-200 bg-white p-3.5 shadow-sm">
@@ -269,6 +238,174 @@ export default function EventShow({ event, isRegistered, registrationClosed, ten
                 </div>
             </div>
         </ManagementLayout>
+    );
+}
+
+type TenantItem = NonNullable<EventItem['tenants']>[number];
+
+function TenantRegistrationAction({
+    eventId,
+    eventTitle,
+    tenant,
+    vouchers,
+}: {
+    eventId: number;
+    eventTitle: string;
+    tenant: TenantItem;
+    vouchers: EventShowProps['tenantVouchers'];
+}) {
+    const [isOpen, setIsOpen] = useState(false);
+    const [voucherId, setVoucherId] = useState<number | null>(vouchers[0]?.id ?? null);
+    const [copyMessage, setCopyMessage] = useState('');
+    const form = useForm({});
+    const selectedVoucher = vouchers.find((voucher) => voucher.id === voucherId);
+    const message = [
+        `Halo, saya tertarik mendaftar sebagai tenant untuk ${eventTitle}.`,
+        'Mohon informasi biaya, persyaratan, dan langkah pendaftarannya.',
+        ...(selectedVoucher ? [`Kode voucher TeKuModal saya: ${selectedVoucher.code}`] : []),
+    ].join('\n');
+
+    const copyMessageToClipboard = async () => {
+        try {
+            await navigator.clipboard.writeText(message);
+            setCopyMessage('Pesan berhasil disalin. Tempelkan di DM Instagram.');
+        } catch {
+            setCopyMessage('Pesan tidak dapat disalin otomatis. Pilih dan salin teks pesan secara manual.');
+        }
+    };
+
+    if (tenant.is_registered) {
+        return (
+            <button className="w-full cursor-default rounded-full bg-white/90 px-4 py-3 text-sm font-semibold text-[#3e5638]" disabled type="button">
+                <i className="fa-solid fa-circle-check mr-2" /> Terdaftar sebagai tenant
+            </button>
+        );
+    }
+
+    const isClosed = tenant.deadline_date !== null && new Date(tenant.deadline_date).getTime() < new Date().setHours(0, 0, 0, 0);
+
+    return (
+        <>
+            <button
+                className="w-full rounded-full bg-white px-4 py-3 text-sm font-semibold text-stone-900 shadow-sm transition hover:bg-stone-100 disabled:cursor-not-allowed disabled:bg-white/70 disabled:text-white/80"
+                disabled={isClosed}
+                onClick={() => setIsOpen(true)}
+                type="button"
+            >
+                {isClosed ? 'Pendaftaran tenant ditutup' : 'Booking Tenant'}
+            </button>
+            {isOpen && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+                    onClick={(event) => {
+                        if (event.target === event.currentTarget) setIsOpen(false);
+                    }}
+                >
+                    <section
+                        aria-labelledby={`tenant-booking-title-${tenant.id}`}
+                        aria-modal="true"
+                        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
+                        role="dialog"
+                    >
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <h2 className="text-lg font-bold text-stone-900" id={`tenant-booking-title-${tenant.id}`}>
+                                    Booking Tenant
+                                </h2>
+                                <p className="mt-1 text-sm text-stone-600">{eventTitle}</p>
+                            </div>
+                            <button
+                                aria-label="Tutup"
+                                className="rounded-full p-2 text-stone-500 hover:bg-stone-100"
+                                onClick={() => setIsOpen(false)}
+                                type="button"
+                            >
+                                <i className="fa-solid fa-xmark" />
+                            </button>
+                        </div>
+                        <p className="mt-4 text-sm leading-6 text-stone-600">
+                            Salin format pesan, lalu buka profil Instagram penyelenggara dan tekan Pesan. Kalau biaya belum dicantumkan, tanyakan
+                            biaya dan persyaratannya.
+                        </p>
+                        <p className="mt-2 text-xs leading-5 text-stone-500">
+                            Pesan tidak dikirim otomatis. Tempelkan format yang sudah disalin di DM Instagram.
+                        </p>
+                        {vouchers.length > 0 && (
+                            <label className="mt-5 block text-sm font-semibold text-stone-800">
+                                Sertakan voucher TeKuModal (opsional)
+                                <select
+                                    className="mt-2 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-normal"
+                                    onChange={(event) => setVoucherId(event.target.value ? Number(event.target.value) : null)}
+                                    value={voucherId ?? ''}
+                                >
+                                    <option value="">Tidak menyertakan voucher</option>
+                                    {vouchers.map((voucher) => (
+                                        <option key={voucher.id} value={voucher.id}>
+                                            {voucher.title} · {voucher.code}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+                        )}
+                        <div className="mt-4 rounded-xl border border-stone-200 bg-stone-50 p-4">
+                            <p className="mb-2 text-xs font-semibold text-stone-700">Contoh pesan DM</p>
+                            <pre className="font-sans text-sm leading-6 whitespace-pre-wrap text-stone-700">{message}</pre>
+                            <button
+                                className="mt-3 rounded-lg border border-stone-300 bg-white px-3 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-100"
+                                onClick={copyMessageToClipboard}
+                                type="button"
+                            >
+                                Salin pesan
+                            </button>
+                            {copyMessage && (
+                                <p className="mt-2 text-xs text-stone-600" role="status">
+                                    {copyMessage}
+                                </p>
+                            )}
+                        </div>
+                        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                            {tenant.instagram_profile_url ? (
+                                <a
+                                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#52704d] px-4 py-3 text-center text-sm font-semibold text-white hover:bg-[#40583b]"
+                                    href={tenant.instagram_profile_url}
+                                    rel="noreferrer"
+                                    target="_blank"
+                                >
+                                    <i className="fa-brands fa-instagram" /> Buka profil Instagram
+                                </a>
+                            ) : (
+                                <p className="rounded-lg bg-amber-50 px-3 py-3 text-xs leading-5 text-amber-800 sm:col-span-2">
+                                    Akun Instagram penyelenggara belum tersedia pada event ini.
+                                </p>
+                            )}
+                            <button
+                                className="rounded-lg border border-[#52704d] px-4 py-3 text-sm font-semibold text-[#40583b] hover:bg-[#f3f6f1] disabled:opacity-60"
+                                disabled={form.processing}
+                                onClick={() =>
+                                    form.post(`/events/${eventId}/tenants/${tenant.id}/registrations`, {
+                                        onSuccess: () => setIsOpen(false),
+                                    })
+                                }
+                                type="button"
+                            >
+                                {form.processing ? 'Menyimpan...' : 'Saya sudah daftar tenant'}
+                            </button>
+                        </div>
+                        {Object.values(form.errors)
+                            .filter((error): error is string => typeof error === 'string')
+                            .map((error) => (
+                                <p className="mt-3 text-sm text-red-700" key={error}>
+                                    {error}
+                                </p>
+                            ))}
+                        <p className="mt-4 text-xs leading-5 text-stone-500">
+                            Menandai terdaftar hanya menyimpan status di akunmu; penyelenggara tetap perlu mengonfirmasi pendaftaranmu. Voucher di DM
+                            juga perlu dikonfirmasi oleh penyelenggara.
+                        </p>
+                    </section>
+                </div>
+            )}
+        </>
     );
 }
 

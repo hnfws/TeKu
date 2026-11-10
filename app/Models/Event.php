@@ -21,9 +21,4 @@ class Event extends Model
     {
         return $this->hasMany(Tenant::class);
     }
-
-    public function registrations(): HasMany
-    {
-        return $this->hasMany(EventRegistration::class);
-    }
 }

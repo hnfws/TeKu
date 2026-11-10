@@ -33,8 +33,12 @@ export default function DashboardCalendar({ events }: DashboardCalendarProps) {
     });
 
     return (
-        <section aria-label="Kalender event terdaftar" className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-            <Link aria-label="Buka kalender event" className="flex items-center justify-between rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#688463]" href="/calendar">
+        <section aria-label="Kalender jadwal event" className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+            <Link
+                aria-label="Buka kalender event"
+                className="flex items-center justify-between rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-[#688463]"
+                href="/calendar"
+            >
                 <div>
                     <h2 className="font-bold text-gray-900">Kalender</h2>
                     <p className="mt-1 text-xs text-gray-500">{today.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</p>
@@ -43,7 +47,9 @@ export default function DashboardCalendar({ events }: DashboardCalendarProps) {
             </Link>
             <div className="mt-5 grid grid-cols-7 gap-y-2 text-center text-xs">
                 {['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'].map((weekday) => (
-                    <span className="py-1 font-medium text-gray-400" key={weekday}>{weekday}</span>
+                    <span className="py-1 font-medium text-gray-400" key={weekday}>
+                        {weekday}
+                    </span>
                 ))}
                 {days.map((day) => {
                     if (typeof day !== 'number') return <span aria-hidden="true" key={day} />;
@@ -57,7 +63,9 @@ export default function DashboardCalendar({ events }: DashboardCalendarProps) {
                             className="flex min-h-8 flex-col items-center justify-center"
                             key={day}
                         >
-                            <span className={`flex h-7 w-7 items-center justify-center rounded-full ${isToday ? 'bg-[#3b66f5] font-bold text-white' : 'text-gray-700'}`}>
+                            <span
+                                className={`flex h-7 w-7 items-center justify-center rounded-full ${isToday ? 'bg-[#3b66f5] font-bold text-white' : 'text-gray-700'}`}
+                            >
                                 {day}
                             </span>
                             {markedEvents.length > 0 && <span aria-hidden="true" className="mt-0.5 h-1 w-1 rounded-full bg-indigo-500" />}

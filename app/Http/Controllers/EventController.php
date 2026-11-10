@@ -3,7 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Event;
-use App\Models\EventRegistration;
+use App\Models\Tenant;
+use App\Models\TenantRegistration;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -30,9 +31,9 @@ class EventController extends Controller
                 ->whereNotNull('end_date')
                 ->where('start_date', '<=', $monthEnd)
                 ->where('end_date', '>=', $monthStart)
-                ->withExists(['registrations as is_registered' => fn ($query) => $query
-                    ->where('user_id', $request->user()->id)
-                    ->where('status', 'registered')])
+                ->withExists(['tenants as is_registered' => fn ($query) => $query
+                    ->whereHas('registrations', fn ($registrations) => $registrations
+                        ->where('user_id', $request->user()->id))])
                 ->orderBy('start_date')
                 ->get(['id', 'title', 'location_name', 'start_date', 'end_date'])
                 ->map(fn (Event $event) => [
@@ -68,10 +69,9 @@ class EventController extends Controller
             'events' => $events,
             'filters' => $request->only(['search', 'category']),
             'categories' => Event::query()->whereNotNull('category')->distinct()->orderBy('category')->pluck('category'),
-            'registeredEventIds' => EventRegistration::query()
+            'registeredTenantIds' => TenantRegistration::query()
                 ->where('user_id', $request->user()->id)
-                ->where('status', 'registered')
-                ->pluck('event_id'),
+                ->pluck('tenant_id'),
         ]);
     }
 
@@ -81,21 +81,26 @@ class EventController extends Controller
         $now = now();
 
         return Inertia::render('events/dashboard', [
-            'registeredEvents' => EventRegistration::query()
-                ->with('event')
+            'tenantRegistrations' => TenantRegistration::query()
+                ->with('tenant.event')
                 ->where('user_id', $userId)
-                ->where('status', 'registered')
                 ->latest('registered_at')
                 ->paginate(3)
-                ->withQueryString(),
-            'calendarEvents' => EventRegistration::query()
-                ->with('event:id,title,start_date')
+                ->withQueryString()
+                ->through(fn (TenantRegistration $registration) => [
+                    'id' => $registration->id,
+                    'tenant_id' => $registration->tenant_id,
+                    'tenant' => ['tenant_type' => $registration->tenant?->tenant_type],
+                    'event' => $registration->tenant?->event,
+                ]),
+            'calendarEvents' => TenantRegistration::query()
+                ->with('tenant.event:id,title,start_date')
                 ->where('user_id', $userId)
-                ->where('status', 'registered')
-                ->whereHas('event', fn ($query) => $query->whereBetween('start_date', [now()->startOfMonth(), now()->endOfMonth()]))
+                ->whereHas('tenant.event', fn ($query) => $query->whereBetween('start_date', [now()->startOfMonth(), now()->endOfMonth()]))
                 ->get()
-                ->map(fn (EventRegistration $registration) => $registration->event)
+                ->map(fn (TenantRegistration $registration) => $registration->tenant?->event)
                 ->filter()
+                ->unique('id')
                 ->map(fn (Event $event) => [
                     'id' => $event->id,
                     'title' => $event->title,
@@ -117,25 +122,28 @@ class EventController extends Controller
 
     public function show(Request $request, Event $event): Response
     {
-        $event->load('tenants');
+        $event->load(['tenants' => fn ($query) => $query->withExists([
+            'registrations as is_registered' => fn ($registrationQuery) => $registrationQuery
+                ->where('user_id', $request->user()->id),
+        ])]);
         $tenantIds = $event->tenants->pluck('id');
+        $event->tenants->each(function ($tenant) use ($event) {
+            $username = $this->instagramUsername($event);
+            $tenant->setAttribute(
+                'instagram_profile_url',
+                $username ? 'https://www.instagram.com/'.rawurlencode($username).'/' : null,
+            );
+        });
 
         return Inertia::render('events/show', [
             'event' => $event,
-            'isRegistered' => $event->registrations()
-                ->where('user_id', $request->user()->id)
-                ->where('status', 'registered')
-                ->exists(),
-            'registrationClosed' => $event->tenants()
-                ->whereNotNull('deadline_date')
-                ->whereDate('deadline_date', '<', now()->toDateString())
-                ->exists(),
             'tenantVouchers' => $request->user()->tekumodalVouchers()
                 ->where('status', 'available')
                 ->whereIn('type', ['tenant_discount_10', 'tenant_discount_20'])
-                ->get(['id', 'type', 'discount_percentage', 'max_discount_amount'])
+                ->get(['id', 'code', 'type', 'discount_percentage', 'max_discount_amount'])
                 ->map(fn ($voucher) => [
                     'id' => $voucher->id,
+                    'code' => $voucher->code,
                     'type' => $voucher->type,
                     'discount_percentage' => $voucher->discount_percentage,
                     'max_discount_amount' => $voucher->max_discount_amount,
@@ -162,37 +170,47 @@ class EventController extends Controller
         ]);
     }
 
-    public function register(Request $request, Event $event): RedirectResponse
+    public function registerTenant(Request $request, Event $event, Tenant $tenant): RedirectResponse
     {
-        if ($event->tenants()
-            ->whereNotNull('deadline_date')
-            ->whereDate('deadline_date', '<', now()->toDateString())
-            ->exists()) {
+        abort_unless($tenant->event_id === $event->id, 404);
+
+        if ($tenant->deadline_date && Carbon::parse($tenant->deadline_date)->toDateString() < now()->toDateString()) {
             return back()->with('error', 'Pendaftaran tenant sudah ditutup karena melewati batas waktu.');
         }
 
-        $registration = EventRegistration::firstOrNew([
-            'event_id' => $event->id,
+        $registration = TenantRegistration::firstOrCreate([
+            'tenant_id' => $tenant->id,
             'user_id' => $request->user()->id,
-        ]);
-        $registration->forceFill([
-            'status' => 'registered',
-            'registered_at' => now(),
-            'email_reminded_at' => null,
-            'browser_reminded_at' => null,
-        ])->save();
+        ], ['registered_at' => now()]);
 
-        return back()->with('success', 'Pendaftaran event berhasil disimpan.');
+        return back()->with(
+            'success',
+            $registration->wasRecentlyCreated
+                ? 'Status pendaftaran tenant berhasil ditandai.'
+                : 'Pendaftaran tenant ini sudah ditandai sebelumnya.',
+        );
     }
 
-    public function cancelRegistration(Request $request, Event $event): RedirectResponse
+    private function instagramUsername(Event $event): ?string
     {
-        EventRegistration::query()
-            ->where('event_id', $event->id)
-            ->where('user_id', $request->user()->id)
-            ->where('status', 'registered')
-            ->update(['status' => 'cancelled']);
+        $username = trim((string) ($event->source_account ?: $event->organizer_name), " @\t\n\r\0\x0B");
+        if (preg_match('/^[A-Za-z0-9._]{1,30}$/', $username)) {
+            return $username;
+        }
 
-        return back()->with('success', 'Pendaftaran event berhasil dibatalkan.');
+        $postUrl = $event->tenants->first()?->instagram_post_url;
+        if (! $postUrl) {
+            return null;
+        }
+
+        $host = parse_url($postUrl, PHP_URL_HOST);
+        $path = trim((string) parse_url($postUrl, PHP_URL_PATH), '/');
+        $segments = explode('/', $path);
+        $candidate = $segments[0] ?? '';
+
+        return in_array($host, ['instagram.com', 'www.instagram.com'], true)
+            && preg_match('/^[A-Za-z0-9._]{1,30}$/', $candidate)
+            ? $candidate
+            : null;
     }
 }

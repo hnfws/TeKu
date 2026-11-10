@@ -27,8 +27,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('events', [EventController::class, 'index'])->name('events.index');
     Route::get('event-dashboard', [EventController::class, 'dashboard'])->name('events.dashboard');
     Route::get('events/{event}', [EventController::class, 'show'])->whereNumber('event')->name('events.show');
-    Route::post('events/{event}/register', [EventController::class, 'register'])->whereNumber('event')->name('events.register');
-    Route::delete('events/{event}/register', [EventController::class, 'cancelRegistration'])->whereNumber('event')->name('events.register.cancel');
+    Route::post('events/{event}/tenants/{tenant}/registrations', [EventController::class, 'registerTenant'])
+        ->whereNumber(['event', 'tenant'])->middleware('throttle:10,1')->name('tenant-registrations.store');
     Route::post('events/{event}/tenants/{tenant}/bookings', [TenantBookingController::class, 'store'])
         ->whereNumber(['event', 'tenant'])->middleware('throttle:10,1')->name('tenant-bookings.store');
     Route::get('tenant-bookings/{booking}/return', [TenantBookingController::class, 'returnFromProvider'])

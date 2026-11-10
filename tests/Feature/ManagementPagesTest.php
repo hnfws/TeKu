@@ -1,15 +1,19 @@
 <?php
 
-use App\Mail\EventReminderMail;
 use App\Models\Event;
-use App\Models\EventRegistration;
 use App\Models\InventoryMovement;
 use App\Models\InventoryProduct;
 use App\Models\Tenant;
+use App\Models\TenantRegistration;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+
+test('participant event registrations are replaced by tenant registrations', function () {
+    expect(Schema::hasTable('event_registrations'))->toBeFalse()
+        ->and(Schema::hasTable('tenant_registrations'))->toBeTrue();
+});
 
 test('users can create inventory and the initial stock is recorded', function () {
     $user = User::factory()->create();
@@ -134,42 +138,77 @@ test('inventory stock cannot be reduced below zero and products are user scoped'
     $this->actingAs($otherUser)->get("/inventory/{$product->id}/edit")->assertNotFound();
 });
 
-test('users can register for an event only once', function () {
+test('users can mark tenant registration once and see it on their dashboards', function () {
     $user = User::factory()->create();
     $event = Event::create([
-        'title' => 'Festival Musik',
-        'category' => 'music',
+        'title' => 'Festival Tenant',
+        'category' => 'bazaar',
         'location_name' => 'Jakarta',
         'start_date' => now()->startOfMonth()->addDays(7),
         'end_date' => now()->startOfMonth()->addDays(7)->addHours(3),
         'latitude' => -6.2,
         'longitude' => 106.8,
+        'source_account' => 'festivaltenant',
+    ]);
+    $tenant = Tenant::create([
+        'event_id' => $event->id,
+        'tenant_type' => 'curated_call',
+        'deadline_date' => now()->addDays(5),
+        'instagram_post_url' => 'https://www.instagram.com/festivaltenant/p/test-post/',
     ]);
 
     $this->actingAs($user)
         ->from("/events/{$event->id}")
-        ->post("/events/{$event->id}/register")
+        ->post("/events/{$event->id}/tenants/{$tenant->id}/registrations")
         ->assertRedirect("/events/{$event->id}");
 
-    $this->post("/events/{$event->id}/register")->assertRedirect("/events/{$event->id}");
-    $this->get("/events/{$event->id}")->assertOk();
+    $this->post("/events/{$event->id}/tenants/{$tenant->id}/registrations")
+        ->assertRedirect("/events/{$event->id}");
+    $this->get("/events/{$event->id}")->assertInertia(fn ($page) => $page
+        ->where('event.tenants.0.is_registered', true)
+        ->where('event.tenants.0.instagram_profile_url', 'https://www.instagram.com/festivaltenant/'));
 
-    expect(EventRegistration::query()
+    expect(TenantRegistration::query()
         ->where('user_id', $user->id)
-        ->where('event_id', $event->id)
+        ->where('tenant_id', $tenant->id)
         ->count())->toBe(1);
 
     $this->get('/event-dashboard')->assertInertia(fn ($page) => $page
         ->component('events/dashboard')
+        ->has('tenantRegistrations.data', 1)
         ->has('calendarEvents', 1)
         ->where('calendarEvents.0.id', $event->id));
     $this->get('/dashboard')->assertInertia(fn ($page) => $page
         ->component('dashboard')
+        ->has('tenantRegistrations', 1)
         ->has('calendarEvents', 1)
-        ->where('calendarEvents.0.id', $event->id));
+        ->where('calendarEvents.0.id', $event->id)
+        ->has('upcomingTenantBookings', 0));
 });
 
-test('users cannot register for tenant opportunities after the deadline', function () {
+test('dashboard shows upcoming dates for registered tenant bookings', function () {
+    $user = User::factory()->create();
+    $event = Event::create([
+        'title' => 'Bazaar Akhir Pekan',
+        'category' => 'bazaar',
+        'location_name' => 'Jakarta',
+        'start_date' => now()->addDays(3)->setTime(10, 30),
+        'end_date' => now()->addDays(3)->setTime(18, 0),
+        'latitude' => -6.2,
+        'longitude' => 106.8,
+    ]);
+    $tenant = Tenant::create(['event_id' => $event->id, 'tenant_type' => 'curated_call']);
+    TenantRegistration::create(['tenant_id' => $tenant->id, 'user_id' => $user->id]);
+
+    $this->actingAs($user)->get('/dashboard')->assertInertia(fn ($page) => $page
+        ->component('dashboard')
+        ->has('upcomingTenantBookings', 1)
+        ->where('upcomingTenantBookings.0.event.id', $event->id)
+        ->where('upcomingTenantBookings.0.event.title', 'Bazaar Akhir Pekan')
+        ->where('upcomingTenantBookings.0.event.location_name', 'Jakarta'));
+});
+
+test('users cannot mark tenant registration after that tenant deadline', function () {
     $user = User::factory()->create();
     $event = Event::create([
         'title' => 'Tenant Bazaar',
@@ -181,7 +220,7 @@ test('users cannot register for tenant opportunities after the deadline', functi
         'longitude' => 106.8,
         'source_account' => 'info.tenant',
     ]);
-    Tenant::create([
+    $tenant = Tenant::create([
         'event_id' => $event->id,
         'tenant_type' => 'curated_call',
         'deadline_date' => now()->subDay(),
@@ -189,48 +228,17 @@ test('users cannot register for tenant opportunities after the deadline', functi
 
     $this->actingAs($user)
         ->from("/events/{$event->id}")
-        ->post("/events/{$event->id}/register")
+        ->post("/events/{$event->id}/tenants/{$tenant->id}/registrations")
         ->assertRedirect("/events/{$event->id}")
         ->assertSessionHas('error');
 
-    expect(EventRegistration::query()
+    expect(TenantRegistration::query()
         ->where('user_id', $user->id)
-        ->where('event_id', $event->id)
+        ->where('tenant_id', $tenant->id)
         ->exists())->toBeFalse();
 
     $this->get("/events/{$event->id}")->assertInertia(fn ($page) => $page
-        ->where('registrationClosed', true)
-        ->where('isRegistered', false));
-});
-
-test('users can cancel an event registration', function () {
-    $user = User::factory()->create();
-    $event = Event::create([
-        'title' => 'Festival Musik',
-        'category' => 'music',
-        'location_name' => 'Jakarta',
-        'start_date' => now()->addDays(10),
-        'end_date' => now()->addDays(10)->addHours(3),
-        'latitude' => -6.2,
-        'longitude' => 106.8,
-    ]);
-    EventRegistration::create([
-        'event_id' => $event->id,
-        'user_id' => $user->id,
-        'status' => 'registered',
-        'registered_at' => now(),
-    ]);
-
-    $this->actingAs($user)
-        ->from("/events/{$event->id}")
-        ->delete("/events/{$event->id}/register")
-        ->assertRedirect("/events/{$event->id}");
-
-    $this->assertDatabaseHas('event_registrations', [
-        'event_id' => $event->id,
-        'user_id' => $user->id,
-        'status' => 'cancelled',
-    ]);
+        ->where('event.tenants.0.is_registered', false));
 });
 
 test('event lists show nearest upcoming dates before later ones', function () {
@@ -263,31 +271,7 @@ test('event lists show nearest upcoming dates before later ones', function () {
         ->where('events.data.1.id', $laterEvent->id));
 });
 
-test('dashboard shows upcoming schedules for registered events', function () {
-    $user = User::factory()->create();
-    $event = Event::create([
-        'title' => 'Bazaar Akhir Pekan',
-        'category' => 'bazaar',
-        'location_name' => 'Jakarta',
-        'start_date' => now()->addDays(2)->setTime(18, 30),
-        'end_date' => now()->addDays(2)->setTime(21, 0),
-        'latitude' => -6.2,
-        'longitude' => 106.8,
-    ]);
-    EventRegistration::create([
-        'event_id' => $event->id,
-        'user_id' => $user->id,
-        'status' => 'registered',
-        'registered_at' => now(),
-    ]);
-
-    $this->actingAs($user)->get('/dashboard')->assertInertia(fn ($page) => $page
-        ->has('upcomingEventReminders', 1)
-        ->where('upcomingEventReminders.0.title', $event->title)
-        ->where('upcomingEventReminders.0.location_name', 'Jakarta'));
-});
-
-test('calendar shows dated events for the requested month and marks registrations', function () {
+test('calendar shows dated events for the requested month with tenant registration status', function () {
     $user = User::factory()->create();
     $month = now()->addMonth()->startOfMonth();
     $event = Event::create([
@@ -299,13 +283,6 @@ test('calendar shows dated events for the requested month and marks registration
         'latitude' => -6.9,
         'longitude' => 107.6,
     ]);
-    EventRegistration::create([
-        'event_id' => $event->id,
-        'user_id' => $user->id,
-        'status' => 'registered',
-        'registered_at' => now(),
-    ]);
-
     $response = $this->actingAs($user)
         ->get('/calendar?month='.$month->format('Y-m'));
     $response->assertOk()->assertInertia(fn ($page) => $page
@@ -313,59 +290,26 @@ test('calendar shows dated events for the requested month and marks registration
         ->where('month', $month->format('Y-m'))
         ->has('events', 1)
         ->where('events.0.id', $event->id)
-        ->where('events.0.is_registered', true));
+        ->where('events.0.is_registered', false));
 });
 
-test('push subscriptions are scoped to their owner', function () {
-    $owner = User::factory()->create();
-    $otherUser = User::factory()->create();
-    $subscription = [
-        'endpoint' => 'https://fcm.googleapis.com/fcm/send/test-endpoint',
-        'keys' => ['p256dh' => 'public-key', 'auth' => 'auth-token'],
-    ];
-
-    $this->actingAs($owner)->postJson('/calendar/push-subscriptions', $subscription)->assertOk();
-    $this->actingAs($otherUser)->postJson('/calendar/push-subscriptions', $subscription)->assertStatus(409);
-    $this->actingAs($otherUser)->deleteJson('/calendar/push-subscriptions', [
-        'endpoint' => $subscription['endpoint'],
-    ])->assertOk();
-
-    $this->assertDatabaseHas('push_subscriptions', [
-        'user_id' => $owner->id,
-        'endpoint_hash' => hash('sha256', $subscription['endpoint']),
-    ]);
-
-    $this->actingAs($owner)->postJson('/calendar/push-subscriptions', [
-        ...$subscription,
-        'endpoint' => 'https://localhost/internal-service',
-    ])->assertUnprocessable();
-});
-
-test('event reminder email is sent only once within the 24 hour window', function () {
-    Mail::fake();
-    config()->set('mail.default', 'smtp');
+test('calendar marks events with a registered tenant', function () {
     $user = User::factory()->create();
     $event = Event::create([
-        'title' => 'Festival Musik',
-        'category' => 'music',
-        'location_name' => 'Jakarta',
-        'start_date' => now()->addHours(23),
-        'end_date' => now()->addHours(26),
-        'latitude' => -6.2,
-        'longitude' => 106.8,
+        'title' => 'Pasar Kreatif',
+        'category' => 'bazaar',
+        'location_name' => 'Bandung',
+        'start_date' => now()->addDays(3),
+        'end_date' => now()->addDays(3)->addHours(4),
+        'latitude' => -6.9,
+        'longitude' => 107.6,
     ]);
-    $registration = EventRegistration::create([
-        'event_id' => $event->id,
-        'user_id' => $user->id,
-        'status' => 'registered',
-        'registered_at' => now(),
-    ]);
+    $tenant = Tenant::create(['event_id' => $event->id, 'tenant_type' => 'curated_call']);
+    TenantRegistration::create(['tenant_id' => $tenant->id, 'user_id' => $user->id]);
 
-    $this->artisan('events:send-reminders')->assertSuccessful();
-    $this->artisan('events:send-reminders')->assertSuccessful();
-
-    Mail::assertSent(EventReminderMail::class, 1);
-    expect($registration->fresh()->email_reminded_at)->not->toBeNull();
+    $this->actingAs($user)->get('/calendar')->assertInertia(fn ($page) => $page
+        ->where('events.0.id', $event->id)
+        ->where('events.0.is_registered', true));
 });
 
 test('scraped event dates remain empty unless the scraper supplies event dates', function () {

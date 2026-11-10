@@ -31,16 +31,15 @@ class PushSubscriptionController extends Controller
             return response()->json(['message' => 'Unsupported push endpoint.'], 422);
         }
 
-        $subscription = PushSubscription::query()
-            ->where('endpoint_hash', hash('sha256', $endpoint))
-            ->first();
+        $endpointHash = hash('sha256', $endpoint);
+        $subscription = PushSubscription::query()->where('endpoint_hash', $endpointHash)->first();
 
         if ($subscription && $subscription->user_id !== $request->user()->id) {
             return response()->json(['message' => 'Endpoint not available.'], 409);
         }
 
         PushSubscription::updateOrCreate(
-            ['endpoint_hash' => hash('sha256', $endpoint)],
+            ['endpoint_hash' => $endpointHash],
             [
                 'user_id' => $request->user()->id,
                 'endpoint' => $endpoint,
