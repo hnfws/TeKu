@@ -12,11 +12,8 @@ use App\Http\Controllers\TeKuModalController;
 use App\Http\Controllers\TeKuModalPaymentController;
 use App\Http\Controllers\TenantBookingController;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
-Route::get('/', function () {
-    return Inertia::render('welcome');
-})->name('home');
+Route::redirect('/', '/login')->name('home');
 
 Route::middleware(['auth'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
