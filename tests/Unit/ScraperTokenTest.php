@@ -43,7 +43,11 @@ it('processes scraped event persistence synchronously and acknowledges the reque
         'deadline_date' => now()->addDays(2)->toISOString(),
     ], [
         'Authorization' => 'Bearer expected-token',
-    ])->assertOk()->assertJson(['status' => 'processed']);
+    ])->assertOk()->assertJson([
+        'status' => 'processed',
+        'title' => 'Event Tenant Call',
+        'image_received' => false,
+    ]);
 
     Bus::assertDispatchedSync(ProcessScrapedEvent::class);
 });

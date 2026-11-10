@@ -37,14 +37,17 @@ class ScraperController extends Controller
             ], 422);
         }
 
-        $result = ProcessScrapedEvent::dispatchSync($validator->validated());
+        $payload = $validator->validated();
+        $result = ProcessScrapedEvent::dispatchSync($payload);
 
         return response()->json([
             'status' => $result ?? 'processed',
+            'title' => $payload['title'],
+            'image_received' => filled($payload['image_base64'] ?? null),
             'message' => match ($result) {
-                'created' => 'Event baru berhasil disimpan.',
-                'updated' => 'Data event berhasil diperbarui.',
-                default => 'Event selesai diproses.',
+                'created' => 'Event "'.$payload['title'].'" baru berhasil disimpan.',
+                'updated' => 'Event "'.$payload['title'].'" berhasil diperbarui.',
+                default => 'Event "'.$payload['title'].'" selesai diproses.',
             },
         ], 200);
     }

@@ -11,7 +11,7 @@ from urllib.parse import urlsplit, urlunsplit
 import requests
 from dotenv import load_dotenv
 from PIL import Image, ImageOps, UnidentifiedImageError
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import Error as PlaywrightError, sync_playwright
 
 load_dotenv(dotenv_path=Path(__file__).with_name(".env"))
 
@@ -153,6 +153,17 @@ def parse_price(caption):
         return currency_amounts[0]
 
     return None
+
+
+def extract_event_title(caption, account_name):
+    """Use the first meaningful caption line as the event title."""
+    caption = re.sub(r"^.*?\bon instagram:\s*", "", caption, flags=re.IGNORECASE | re.DOTALL)
+    for line in caption.splitlines():
+        title = re.sub(r"\s+", " ", line).strip(" \t\r\n|•-–—\"'“”")
+        if re.search(r"[^\W_]", title, flags=re.UNICODE) and not re.fullmatch(r"(?:#\w+\s*)+", title):
+            return title[:255].strip()
+
+    return f"Tenant Call - @{account_name}"
 
 
 def parse_money_amount(value):
@@ -332,18 +343,26 @@ def get_post_urls(page, account_name):
     return list(dict.fromkeys(post_urls))
 
 
-def compress_post_image(image_url, post_url):
-    response = requests.get(
-        image_url,
-        headers={
-            "User-Agent": "Mozilla/5.0 (compatible; TeKuInstagramScraper/1.0)",
-            "Referer": post_url,
-        },
-        timeout=20,
-    )
-    response.raise_for_status()
+def compress_post_image(image_url, post_url, post_page=None):
+    headers = {"Referer": post_url}
+    if post_page is not None:
+        response = post_page.request.get(image_url, headers=headers, timeout=20_000)
+        if not response.ok:
+            raise requests.HTTPError(f"Instagram CDN membalas HTTP {response.status}.")
+        image_content = response.body()
+    else:
+        response = requests.get(
+            image_url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (compatible; TeKuInstagramScraper/1.0)",
+                **headers,
+            },
+            timeout=20,
+        )
+        response.raise_for_status()
+        image_content = response.content
 
-    with Image.open(BytesIO(response.content)) as source:
+    with Image.open(BytesIO(image_content)) as source:
         image = ImageOps.exif_transpose(source).convert("RGB")
 
     for dimensions in (1024, 800, 640, 480):
@@ -381,19 +400,19 @@ def get_post_details(page):
     return posted_at, caption, image_url
 
 
-def send_match(account_name, post_url, caption, posted_at, image_url=None):
+def send_match(account_name, post_url, caption, posted_at, image_url=None, post_page=None):
     start_date, end_date = parse_event_dates(caption, posted_at)
     image_base64 = None
     if image_url:
         try:
-            image_base64 = compress_post_image(image_url, post_url)
-        except (requests.RequestException, OSError, UnidentifiedImageError, RuntimeError) as error:
+            image_base64 = compress_post_image(image_url, post_url, post_page)
+        except (PlaywrightError, requests.RequestException, OSError, UnidentifiedImageError, RuntimeError) as error:
             print(f"  [!] Gambar postingan tidak dapat diambil/dikompres: {error}")
     else:
         print("  [!] Postingan tidak menyediakan URL gambar og:image.")
 
     payload = {
-        "title": f"Event Tenant Call - @{account_name}",
+        "title": extract_event_title(caption, account_name),
         "description": caption,
         "location_name": "Jakarta / Depok (Perlu Validasi)",
         "latitude": -6.2,
@@ -424,7 +443,10 @@ def send_match(account_name, post_url, caption, posted_at, image_url=None):
             f"Laravel API membalas {response.status_code}: {response.text}",
             response=response,
         )
-    print(f"  [->] Laravel API: {response.status_code} - {response.text}")
+    result = response.json()
+    print(f"  [->] Laravel API: {response.status_code} - {result.get('message', response.text)}")
+    if not result.get("image_received", False):
+        print("  [!] Event tersimpan tanpa gambar; periksa log pengambilan gambar di atas.")
 
 
 def process_account(profile_page, post_page, account_name, cutoff, known_posts=None):
@@ -483,7 +505,7 @@ def process_account(profile_page, post_page, account_name, cutoff, known_posts=N
 
             if contains_keywords(caption):
                 print(f"  [🔥] MATCH FOUND! @{account_name}: {post_url}")
-                send_match(account_name, post_url, caption, posted_at, image_url)
+                send_match(account_name, post_url, caption, posted_at, image_url, post_page)
             else:
                 print(f"  [-] Postingan tidak cocok: {post_url} ({posted_at.date()})")
 

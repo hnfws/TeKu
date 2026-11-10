@@ -10,10 +10,23 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from igscrap import compress_post_image, parse_event_dates, parse_price
+from igscrap import compress_post_image, extract_event_title, parse_event_dates, parse_price
 
 
 class CaptionParsingTest(unittest.TestCase):
+    def test_extracts_event_title_from_first_caption_line(self):
+        self.assertEqual(
+            extract_event_title("Jakarta Food Festival 2026\nPendaftaran tenant dibuka!", "jktgo"),
+            "Jakarta Food Festival 2026",
+        )
+
+    def test_extracts_title_after_instagram_metadata_and_falls_back_when_empty(self):
+        self.assertEqual(
+            extract_event_title("20 likes - jktgo on Instagram: \"Jakarta Night Market\"", "jktgo"),
+            "Jakarta Night Market",
+        )
+        self.assertEqual(extract_event_title("#bazaar\n", "jktgo"), "Tenant Call - @jktgo")
+
     def test_extracts_indonesian_event_date_range_and_tenant_fee(self):
         caption = "Pendaftaran tenant bazaar 12-14 Desember 2026. Harga booth mulai Rp1.500.000."
 
@@ -81,6 +94,35 @@ class CaptionParsingTest(unittest.TestCase):
         with Image.open(BytesIO(image_bytes)) as compressed:
             self.assertLessEqual(max(compressed.size), 1024)
         self.assertLessEqual(len(image_bytes), 240_000)
+
+    def test_uses_browser_request_context_for_instagram_image(self):
+        source = BytesIO()
+        Image.new("RGB", (80, 60), "green").save(source, format="JPEG")
+
+        class FakeResponse:
+            ok = True
+            status = 200
+
+            def body(self):
+                return source.getvalue()
+
+        class FakeRequest:
+            def get(self, url, headers, timeout):
+                self.url = url
+                self.headers = headers
+                self.timeout = timeout
+                return FakeResponse()
+
+        class FakePage:
+            request = FakeRequest()
+
+        encoded = compress_post_image(
+            "https://cdn.example/image.jpg",
+            "https://instagram.com/p/post/",
+            FakePage(),
+        )
+
+        self.assertTrue(base64.b64decode(encoded))
 
 
 if __name__ == "__main__":
